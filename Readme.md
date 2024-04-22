@@ -1,5 +1,7 @@
 # Lightweight and fast database access with query builder for MySQL and SQLite databases.
 
+The single module is trying to simplify the database access for your web application, preventing sql injections, making it easier to move from one database to another, offering a general interface to access the database.
+
 ## Database
 
 Connecting to a database need to be done only once in your application. After that the connection will be found.
