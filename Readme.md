@@ -1,4 +1,4 @@
-# Lightweight and fast database access with query builder for MySQL and SQLite databases.
+# Lightweight and fast database access with query builder for MySQL and SQLite databases, as well as a Flatfile database implementation
 
 The single module is trying to simplify the database access for your web application, preventing sql injections, making it easier to move from one database to another, offering a general interface to access the database.
 
@@ -9,7 +9,7 @@ Connecting to a database need to be done only once in your application. After th
 ### SQLite
 
 ```python
-    db = pdo.Database().DbSQ3('dbtest.db')
+    db = pda.Database().DbSQ3('/somewhere/dbtest.sqlite')
 ```
 
 ### MySql
@@ -18,8 +18,18 @@ Connecting to a database need to be done only once in your application. After th
     database='dbtest'
     user='dbuser'
     password='dbpassword'
-    db = pdo.Database().DbMSQ(host, database, user, password)
+    db = pda.Database().DbMSQ(host, database, user, password)
 ```
+
+### Flatfile
+
+```python
+    datapath='/somewhere'
+    db = pda.Database().DbFlat(datapath, 'dbtest.flat')
+
+```
+
+In cases where sqlite and mysql isnt available or you just want to store and retrieve some data, this might be a solution. Data are stored in the os filesystem.
 
 ## Tables
 
@@ -28,7 +38,7 @@ Connecting to a database need to be done only once in your application. After th
 Opens a table and will raise an exception if the table doesnt exist:
 
 ```python
-    products=pdo.Table('Products')
+    products=pda.Table('Products')
 ```
 
 ### Open / create a table  
@@ -41,19 +51,18 @@ Opens a table and will create it if it doesnt exist:
            Description TEXT NOT NULL UNIQUE,\
            Price REAL, Min INTEGER,\
            Inactive INTEGER)'
-           customer=pdo.Table('Products')
 
-    products=pdo.Table('Products', stmt)
+    products=pda.Table('Products', stmt)
 ```
 
 ### Open / create a table using a model
 
 ```python
-    class Products(pdo.Table):
+    class Products(pda.Table):
         _name: str = 'Products'
 
         def DDL(self):
-            return pdo.DDL(self._name) \
+            return pda.DDL(self._name) \
                 .integer('ProductId', True, True, True) \
                 .text('Description', 64, True, True) \
                 .real('Price' ) \
@@ -82,7 +91,7 @@ class OrderDetails(pda.Table):
 ### Drop a table
 
 ```python
-    pdo.Table('Products').drop()
+    pda.Table('Products').drop()
 ```
 or
 ```python
@@ -187,3 +196,11 @@ You can load this statement and pass it on:
         products.import_csv('product_importdata.csv')
         products.export_csv('product_exportdata.csv')
 ```
+
+### Running the Tests
+
+The tests can be run individually i.e.:
+
+python3 -m unittest discover tests test_pda_mysql.py
+python3 -m unittest discover tests test_pda_sqlite.py
+python3 -m unittest discover tests test_pda_flat.py

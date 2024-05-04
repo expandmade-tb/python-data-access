@@ -2,9 +2,12 @@ import sqlite3
 import mysql.connector
 import re
 import csv
+from lib import flat
+import operator
+import warnings
 
 #====================================================================
-# PDA V1.0.0
+# PDA V1.1.0
 #
 # Data-Access-Layer and query builder for MySQL and SQLite 
 #====================================================================
@@ -12,7 +15,7 @@ import csv
 last_database_exception: str = ''
 
 #--------------------------------------------------------------------
-class PDOException(Exception):
+class PDAException(Exception):
 #--------------------------------------------------------------------
     pass
 
@@ -158,6 +161,30 @@ class DDL():
         return sql
 
 
+    def createFlat(self)->str:
+        sql = ''
+
+        for field, values in self.__fields.items():
+            autoincrment = ''
+            required = 'REQUIRED' if values['not_null'] == True else ''
+
+            type = str(values['type']).upper()
+
+            if values['auto_increment'] == True:
+                autoincrment = 'AUTOINCREMENT'
+
+                if self.__primary_key:
+                    raise PDAException(f"primary key already declared for {self.__primary_key}")
+
+                self.__primary_key = field
+
+            if self.__primary_key and self.__primary_key == field:
+                sql += f"{field} {type} PRIMARY_KEY {autoincrment}, "
+            else:
+                sql += f"{field} {type} {required}, "
+
+        return sql[:-2]
+
 #--------------------------------------------------------------------
 class Singleton(type):
 #--------------------------------------------------------------------
@@ -193,6 +220,13 @@ class Database(metaclass=Singleton):
         self.__connection = mysql.connector.connect(host=dbhost, database=dbname, user=dbuser, password=dbpass)
         return self
     
+
+    def DbFlat(self, path: str, name: str):
+        self.__dbname = name
+        self.__dbtype = 'FLAT'
+        self.__connection = flat.FlatDatabase(path, name).connect()
+        return self
+
 
     def dbtype(self)->str:
         return self.__dbtype
@@ -340,14 +374,19 @@ class Table():
                 self.instance = TableSQ3(self._name, create_stmt, self._ddl)
             elif type == 'MSQ':
                 self.instance = TableMSQ(self._name, create_stmt, self._ddl)
+            elif type == 'FLAT':
+                self.instance = TableFlat(self._name, create_stmt, self._ddl)
             else:
                 pass
         else:
-            raise PDOException(f"no database connection found")
+            raise PDAException(f"no database connection found")
 
 
     def DDL(self):
-        return None
+        """
+        method should be overwritten by using the DDL class
+        """
+        return ''
 
 
     @staticmethod
@@ -600,7 +639,7 @@ class Table():
         return self.instance.rollbackTransaction()
     
 
-    def import_csv(self, *args, **kwargs)->bool:
+    def import_csv(self, **kwargs)->bool:
         """
         imports data from a csv file into table
         -
@@ -659,7 +698,7 @@ class Table():
 
         return True
 
-    def export_csv(self, *args, **kwargs)->int:
+    def export_csv(self, **kwargs)->int:
         """
         exports table data to a csv file
         -
@@ -748,7 +787,7 @@ class TableBaseClass:
         self._parameter_marker = '?'
         self._ddl: DDL = None
         print('specifig implementation missing')
-        return self
+
 
     def quote(self, s: str)->str:
         return "'" + s.replace("'", "''") + "'" 
@@ -783,13 +822,13 @@ class TableBaseClass:
 
     def create(self, sql: str):
         if not sql:
-            raise PDOException("sql create statement is empty") 
+            raise PDAException("sql create statement is empty") 
         
         if sql == None or self._name not in sql:
-            raise PDOException("sql create statement invalid tablename") 
+            raise PDAException("sql create statement invalid tablename") 
 
         if Database.exec(self._cursor, sql) == False:
-            raise PDOException(f"sql create table {self._name} statement failed") 
+            raise PDAException(f"sql create table {self._name} statement failed") 
         
         return self
 
@@ -799,7 +838,7 @@ class TableBaseClass:
         result = Database.exec(self._cursor, sql) 
 
         if result == False:
-            raise PDOException(f"table {self._name} cannot be dropped")
+            raise PDAException(f"table {self._name} cannot be dropped")
         
         return self
     
@@ -817,7 +856,7 @@ class TableBaseClass:
                 continue
 
             if field not in self._fields:
-                raise PDOException(f"field {field} in table {self._name} not defined")
+                raise PDAException(f"field {field} in table {self._name} not defined")
             
             cols += f"{field}, "
             params += f"{self._parameter_marker}, "
@@ -863,7 +902,7 @@ class TableBaseClass:
                 continue
 
             if field not in self._fields:
-                raise PDOException(f"field {field} in table {self._name} not defined")
+                raise PDAException(f"field {field} in table {self._name} not defined")
             
             vals.append(value)
             sql += f"{field}={self._parameter_marker}, "
@@ -876,7 +915,7 @@ class TableBaseClass:
             result = Database.exec(self._cursor, sql, tuple(data.values()) + (id, )) 
         
         if result == False:
-            raise PDOException(f"data cannot be updated in table {self._name}")
+            raise PDAException(f"data cannot be updated in table {self._name}")
 
         if self._cursor.rowcount == 1:
             return True
@@ -894,7 +933,7 @@ class TableBaseClass:
                 continue
 
             if field not in self._fields:
-                raise PDOException(f"field {field} in table {self._name} not defined")
+                raise PDAException(f"field {field} in table {self._name} not defined")
             
             vals.append(value)
             sql += f"{field}={self._parameter_marker}, "
@@ -980,7 +1019,7 @@ class TableBaseClass:
         result = Database.fetchone(self._cursor, sql, params)
 
         if result is None:
-            raise PDOException(f"count data from table {self._name} failed")
+            raise PDAException(f"count data from table {self._name} failed")
         
         if result == False:
             return 0
@@ -1037,7 +1076,7 @@ class TableBaseClass:
             result = Database.fetchall(self._cursor, sql, params)
 
         if result == False:
-            raise PDOException(f"findAll data from table {self._name} failed")
+            raise PDAException(f"findAll data from table {self._name} failed")
 
         return result
 
@@ -1090,7 +1129,7 @@ class TableSQ3(TableBaseClass):
         self._meta_data = Database.fetchall(self._cursor, stmt)
 
         if self._meta_data is None or False:
-              raise PDOException(f"cannot retrieve metadata from table {name}")
+              raise PDAException(f"cannot retrieve metadata from table {name}")
         
         for value in self._meta_data: # building field dictionary from meta data
             if value['pk'] > 0:
@@ -1102,7 +1141,7 @@ class TableSQ3(TableBaseClass):
             self._fields[value['name']] = {'type': value['type'], 'default': value['dflt_value'], 'required': True if value['notnull'] == 1 else False}
 
         if not self._pk and type == 'table': # a primary key for a table is mandatory
-              raise PDOException(f"table {name} no primary key defined")
+              raise PDAException(f"table {name} no primary key defined")
 
         if self._pk_query:
             self._pk_query = self._pk_query[:-5]
@@ -1143,7 +1182,7 @@ class TableMSQ(TableBaseClass):
         self._meta_data = Database.fetchall(self._cursor, stmt)
 
         if self._meta_data is None or False:
-              raise PDOException(f"cannot retrieve metadata from table {name}")
+              raise PDAException(f"cannot retrieve metadata from table {name}")
         
         for key, value in enumerate(self._meta_data): # building field dictionary from meta data
             if value['Key'] == 'PRI':
@@ -1155,7 +1194,7 @@ class TableMSQ(TableBaseClass):
             self._fields[value['Field']] = {'type': value['Type'], 'default': value['Default'], 'required': True if value['Null'] == 'NO' else False}
 
         if not self._pk and type == 'table': # a primary key for a table is mandatory
-              raise PDOException(f"table {name} no primary key defined")
+              raise PDAException(f"table {name} no primary key defined")
 
         if self._pk_query:
             self._pk_query = self._pk_query[:-5]
@@ -1163,3 +1202,150 @@ class TableMSQ(TableBaseClass):
 
     def __del__(self): 
         self._cursor.close()
+
+
+#--------------------------------------------------------------------
+class TableFlat(TableBaseClass):
+#--------------------------------------------------------------------
+
+    __table: flat.FlatTable
+
+    def __init__(self, name: str, create_stmt: str, DDL=None, type: str='table' ):
+        self._type = type
+        self._name = name
+        self._ddl = DDL
+        self._parameter_marker = ''
+        self._db = Database().connection()
+        self.__table = flat.FlatTable(self._db, self._name, self._ddl.createFlat() )
+        self._meta_data.clear()
+        self._fields = self.__table.fields()
+        self._pk[0] = self.__table.primaryKey() # we can have only a single field as primary key
+
+        if not self._db.tableExists(self._name):
+            self.create('')
+
+
+    def create(self, sql: str):
+        self._db.createTable(self._name)
+        return self
+
+
+    def drop(self):
+        self._db.dropTable(self._name)
+        return self
+
+
+    def insert(self, data: dict, empty_is_null: bool=True)->bool:
+        try:
+            return self.__table.insert(data)
+            return True
+        except flat.FlatTableException:
+            return False
+        except flat.FlatValidationException as e:
+            raise PDAException(e.args)
+
+
+    def delete(self, id)->bool:
+        return self.__table.delete(id)
+
+
+    def deleteAll(self):
+        for id in self.__table.findAll(limit=self._limit, offset=self._offset, return_ids=True):
+            self.delete(id)
+
+        self._limit = 0
+        self._offset = 0
+
+
+    def update(self, id, data: dict)->bool:
+        try:
+            result = self.__table.update(id, data)
+
+            if result == False:
+                return False
+            else:
+                return True
+        except flat.FlatTableException:
+                return False
+        except flat.FlatValidationException as e:
+            raise PDAException(e.args)
+
+
+    def updateAll(self, data: dict)->bool:
+        for id in self.__table.findAll(limit=self._limit, offset=self._offset, return_ids=True):
+            self.update(id, data)
+
+        self._limit = 0
+        self._offset = 0
+        return True
+
+
+    def find(self, id):
+        return self.__table.find(id)
+
+
+    def where(self, field: str, value: any, compare: str='=', conditional: str='and'):
+        self.__table.where(field, value, compare, conditional)
+        return self
+
+
+    def addIdentity(self, identify: bool=True):
+        raise NotImplementedError()
+
+
+    def count(self, select: str='', prepared_params: tuple=() )->int:
+        return self.__table.count()
+
+
+    def findFirst(self, select: str='', prepared_params: tuple=()):
+        result = self.findAll()
+
+        if len(result) > 0:
+            return result[0]
+        else:
+            return False
+
+        
+    def addIdentity(self, identify: bool = True):
+        raise NotImplementedError()
+
+
+    def findAll(self, select: str='', prepared_params: tuple=(), fetchone: bool=False):
+        if self._orderby and (self._limit > 0 or self._offset > 0):
+            # for computers memory sake, execution order of limit, offset and order_by is in reverse order.
+            # therefore results are different from real databases, the order by is meant to be a sort of the 
+            # resuling rows
+            warnings.warn('execution order of limit/offset and order by is reverse')
+        
+        result = self.__table.findAll(limit=self._limit, offset=self._offset)
+
+        if self._limit > 0:
+            self._limit = 0
+
+        if self._offset > 0:
+            self._offset = 0
+
+        if self._orderby:
+            criteria = self._orderby.strip().replace('  ', '').split(" ")
+            direction = criteria.pop()
+            self._orderby = ''
+
+            if direction.upper() == 'DESC':
+                return sorted(result, key=operator.itemgetter(*criteria), reverse=True)
+            else:
+                return sorted(result, key=operator.itemgetter(*criteria))
+        else:
+            return result
+
+
+    def beginTransaction(self):
+        raise NotImplementedError()
+
+
+    def commitTransaction(self):
+        raise NotImplementedError()
+
+
+    def rollbackTransaction(self):
+        raise NotImplementedError()
+

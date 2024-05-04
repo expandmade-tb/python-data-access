@@ -1,6 +1,12 @@
 import unittest
 from pathlib import Path
-import pda
+from lib import pda
+
+#====================================================================
+# Unittest V1.1.0
+#
+# sqlite database
+#====================================================================
 
 class TestModel(pda.Table):
     _name: str = 'Person'
@@ -23,16 +29,16 @@ class TestModelCopy(pda.Table):
             .integer('aInt')
 
 
-class PdoTest(unittest.TestCase):
+class PdaTest(unittest.TestCase):
     # params for a db connection
-    datapath='data'
-    dbname='test.db'
+    datapath='tests/data'
+    dbname='sqlite.db'
 
     db = None
     table = None
 
     def step_000(self):
-        print("setup...") 
+        print("SQLite test setup...") 
         Path(self.datapath).mkdir(exist_ok=True)
 
     def step_001(self):
@@ -68,7 +74,7 @@ class PdoTest(unittest.TestCase):
     def step_008(self):
         print("insert unknown field...")
        
-        with self.assertRaises(pda.PDOException):
+        with self.assertRaises(pda.PDAException):
             result = self.table.insert({'xKey':'KeyVal', 'aString':'StrVal', 'aInt':'1'});   
 
     def step_009(self):
@@ -98,70 +104,71 @@ class PdoTest(unittest.TestCase):
 
     def step_014(self):
         print("update invalid field...")
-        result = self.table.update(1, {'xString':'UpdatedStrVal'})
-        self.assertEqual(result, False)
 
-    def step_014(self):
+        with self.assertRaises(pda.PDAException):
+            result = self.table.update(1, {'xString':'UpdatedStrVal'})
+
+    def step_015(self):
         print("update non existing id...")
         result = self.table.update(999, {'aString':'UpdatedStrVal'})
         self.assertEqual(result, False)
 
-    def step_015(self):
+    def step_016(self):
         print("find existing id...")
         result = self.table.find(1)
         self.assertIsNot(result, False)
         self.assertIsNotNone(result)
         self.assertEqual(result['aString'], 'UpdatedStrVal')
 
-    def step_016(self):
+    def step_017(self):
         print("find non existing id...")
         result = self.table.find(999)
         self.assertEqual(result, None)
 
-    def step_017(self):
+    def step_018(self):
         print("count rows...")
         result = self.table.count()
         self.assertEqual(result, 2)
 
-    def step_018(self):
+    def step_019(self):
         print("count rows where equal...")
         result = self.table.where('aInt', 1).count()
         self.assertEqual(result, 2)
 
-    def step_018(self):
+    def step_020(self):
         print("count rows where like...")
         result = self.table.where('aString', 'Updated%', 'like').count()
         self.assertEqual(result, 1)
 
-    def step_019(self):
+    def step_021(self):
         print("count with subselect and prepared params...")
         select = 'select * from Person where aInt = ? and aString like ?'
         params = ('1', 'Updated%')
         result = self.table.count(select, params)
         self.assertEqual(result, 1)
 
-    def step_019(self):
+    def step_022(self):
         print("findfirst order...")
         result = self.table.orderBy('aKey').findFirst()
         self.assertIsNot(result, False)
         self.assertIsNotNone(result)
         self.assertEqual(result['aString'], 'UpdatedStrVal')
 
-    def step_020(self):
+    def step_023(self):
         print("insert and delete...")
         result = self.table.insert({'aKey':'KeyVal3', 'aString':'StrVal', 'aInt':'1'})
         self.assertEqual(result, True)
-        self.table.delete(3)
+        result = self.table.delete(3)
         self.assertEqual(result, True)
 
-    def step_021(self):
+    def step_024(self):
         print("findall...")
         result = self.table.findAll()
         self.assertIsNot(result, False)
         self.assertIsNotNone(result)
         self.assertEqual(len(result), 2)
 
-    def step_022(self):
+    def step_025(self):
         print("begin / rollback transaction...")
         self.table.beginTransaction()
         
@@ -172,7 +179,7 @@ class PdoTest(unittest.TestCase):
         result = self.table.count()
         self.assertEqual(result, 2)
 
-    def step_023(self):
+    def step_026(self):
         print("begin / commit transaction...")
         self.table.beginTransaction()
         
@@ -183,14 +190,14 @@ class PdoTest(unittest.TestCase):
         result = self.table.count()
         self.assertEqual(result, 7)
 
-    def step_024(self):
+    def step_027(self):
         print("findall limit...")
         result = self.table.limit(2).findAll()
         self.assertIsNot(result, False)
         self.assertIsNotNone(result)
         self.assertEqual(len(result), 2)
 
-    def step_025(self):
+    def step_028(self):
         print("findall limit offset orderby...")
         result = self.table.limit(2).offset(2).orderBy('aKey', 'DESC').findAll()
         self.assertIsNot(result, False)
@@ -198,58 +205,58 @@ class PdoTest(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]['aKey'], 'KeyVal13')
 
-    def step_025(self):
+    def step_029(self):
         print("findall where orderby...")
         result = self.table.where('aInt', 1).orderBy('aKey').findAll()
         self.assertEqual(result[0]['aId'], 1)
 
-    def step_026(self):
+    def step_030(self):
         print("findall select prepared...")
         select = 'select * from person where aInt = :ivalue and aString like :svalue'
         params = {'ivalue': 1, 'svalue': 'Upd%'}
         result = self.table.findAll(select, params)
         self.assertEqual(result[0]['aId'], 1)
 
-    def step_027(self):
+    def step_031(self):
         print("findall limit select prepared...")
         select = 'select * from person where aString like :svalue'
         params = {'svalue': 'Str%'}
         result = self.table.limit(5).orderBy('aId', 'DESC').findAll(select, params)
         self.assertEqual(result[0]['aId'], 8)
 
-    def step_028(self):
+    def step_032(self):
         print("findall add identity...")
         result = self.table.addIdentity().findAll()
         self.assertEqual(result[0]['row_identifier'], 1)
         self.table.addIdentity(False)
 
-    def step_029(self):
+    def step_033(self):
         print("inject or 1=1...")
         result = self.table.where('aInt', '1 or 1=1').findAll()
         self.assertEqual(len(result), 0)
 
-    def step_030(self):
+    def step_034(self):
         print('inject or ""=""...')
         result = self.table.where('aId', '2 or ""=""').where('aString', 'StrVal or ""=""').findAll()
         self.assertEqual(len(result), 0)
 
-    def step_031(self):
+    def step_035(self):
         print('inject batched SQL...')
         result = self.table.where('aId', '1; drop table Person').findAll()
         self.assertEqual(len(result), 0)
 
-    def step_032(self):
+    def step_036(self):
         print('inject "--...')
-        result = self.table.where('aId', '2 "--').where('aString', 'StrVal').findAll()
+        result = self.table.where('aId', '2 "--').where('aInt', '2').findAll()
         self.assertEqual(len(result), 0)
 
-    def step_033(self):
+    def step_037(self):
         print("export to csv...")
         filename = f"{self.datapath}/{self.table.name()}.csv"
         result = self.table.export_csv(filename=filename)
         self.assertEqual(result, 7)
 
-    def step_034(self):
+    def step_038(self):
         print("import from csv...")
         tmc = TestModelCopy().drop()
         tmc = TestModelCopy()
@@ -262,13 +269,13 @@ class PdoTest(unittest.TestCase):
         sum2 = tmc.findFirst('select sum(aInt) as SUM from PersonCopy')
         self.assertEqual(sum1, sum2)
 
-    def step_035(self):
+    def step_039(self):
         print("update all...")
         tmc = TestModelCopy()
         result = tmc.where('aInt', 1).updateAll({'aInt': '99'})
         self.assertEqual(result, True)
 
-    def step_046(self):
+    def step_040(self):
         print("delete all...")
         tmc = TestModelCopy()
         result = tmc.where('aInt', '99').deleteAll()
