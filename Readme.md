@@ -201,6 +201,50 @@ You can load this statement and pass it on:
 
 The tests can be run individually i.e.:
 
+```bash
 python3 -m unittest discover tests test_pda_mysql.py
 python3 -m unittest discover tests test_pda_sqlite.py
 python3 -m unittest discover tests test_pda_flat.py
+```
+
+### Running Benchmark
+
+```bash
+python3 benchmarks.py -h
+usage: benchmarks.py [-h] [-r ROWS]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -r ROWS, --rows ROWS  set no. of rows to generate and process
+```
+The SQLite and Flatfile database will be created in the same folder in "./tests/data/[sqlite.db] and [flat.db]. In order to use Mysql, ypu will need to create a database. (host=localhost, dbname=db_test, dbuser=db_test, dbpass=db_password). If you are going to use something else, you will have to change the following line:
+
+```python
+bm = DBBenchmark('MSQ','Benchmarks for MySQL Database', dbname='db_test')
+```
+
+to your individual settings:
+
+```python
+bm = DBBenchmark('MSQ','Benchmarks for MySQL Database', host='xxx', dbname='xxx', dbuser='xxx', dbpass='xxx')
+```
+
+The output would be something like this:
+
+```bash
+Benchmarks for SQLite Database
+   + insert 1000 rows in:  0.11565 secs
+   + read 1000 rows in:  0.01676 secs
+   + select and count rows: 100 counted in  0.00022 secs
+   + delete 1000 rows in:  0.01205 secs
+Benchmarks for MySQL Database
+   + insert 1000 rows in:  0.70933 secs
+   + read 1000 rows in:  0.2949 secs
+   + select and count rows: 100 counted in  0.00092 secs
+   + delete 1000 rows in:  0.22095 secs
+Benchmarks for Flatfile Database
+   + insert 1000 rows in:  0.37627 secs
+   + read 1000 rows in:  0.0407 secs
+   + select and count rows: 100 counted in  0.04923 secs
+   + delete 1000 rows in:  0.01634 secs
+```

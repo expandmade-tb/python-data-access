@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 #====================================================================
-# FLAT V1.0.0
+# FLAT V1.0.1
 #
 # flatfile database
 #====================================================================
@@ -280,7 +280,10 @@ class FlatTable():
                 result = len(re.findall(pattern, data_value)) > 0
                 clause += f"{result} == True"
             else:
-                clause += f"{type} '{data_value}' {op} '{value}'"
+                if isinstance(value, (int, float)) and isinstance(data_value, (int, float)):
+                    clause += f"{type} {data_value} {op} {value}"
+                else:
+                    clause += f"{type} '{data_value}' {op} '{value}'"
 
         result = eval(clause)
         return result
