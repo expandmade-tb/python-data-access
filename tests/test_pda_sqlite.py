@@ -2,11 +2,12 @@ import unittest
 from pathlib import Path
 from lib import pda
 
-#====================================================================
+# ====================================================================
 # Unittest V1.1.0
 #
 # sqlite database
-#====================================================================
+# ====================================================================
+
 
 class TestModel(pda.Table):
     _name: str = 'Person'
@@ -15,8 +16,11 @@ class TestModel(pda.Table):
         return pda.DDL(self._name) \
             .integer('aId', True, True, True) \
             .text('aKey', 64, True, True) \
-            .text('aString' ) \
-            .integer('aInt')
+            .text('aString') \
+            .integer('aInt') \
+            .datetime('adatetime', False, False, 'CURRENT_TIMESTAMP') \
+            .text('defaultcol', 32, False, False, 'test content')
+
 
 class TestModelCopy(pda.Table):
     _name: str = 'PersonCopy'
@@ -25,25 +29,27 @@ class TestModelCopy(pda.Table):
         return pda.DDL(self._name) \
             .integer('aId', True, True, True) \
             .text('aKey', 64, True, True) \
-            .text('aString' ) \
-            .integer('aInt')
+            .text('aString') \
+            .integer('aInt') \
+            .datetime('adatetime', False, False, 'CURRENT_TIMESTAMP') \
+            .text('defaultcol', 32, False, False, 'test content')
 
 
 class PdaTest(unittest.TestCase):
     # params for a db connection
-    datapath='tests/data'
-    dbname='sqlite.db'
+    datapath = 'tests/data'
+    dbname = 'sqlite.db'
 
     db = None
     table = None
 
     def step_000(self):
-        print("SQLite test setup...") 
+        print("SQLite test setup...")
         Path(self.datapath).mkdir(exist_ok=True)
 
     def step_001(self):
         print("connect to sqlite database...")
-        filename=f"{self.datapath}/{self.dbname}"
+        filename = f"{self.datapath}/{self.dbname}"
         self.db = pda.Database().DbSQ3(filename)
 
     def step_002(self):
@@ -69,48 +75,48 @@ class PdaTest(unittest.TestCase):
     def step_007(self):
         print("fieldList...")
         result = self.table.fieldList()
-        self.assertEqual('aId, aKey, aString, aInt', result)
+        self.assertEqual('aId, aKey, aString, aInt, adatetime, defaultcol', result)
 
     def step_008(self):
         print("insert unknown field...")
-       
+
         with self.assertRaises(pda.PDAException):
-            result = self.table.insert({'xKey':'KeyVal', 'aString':'StrVal', 'aInt':'1'});   
+            self.table.insert({'xKey': 'KeyVal', 'aString': 'StrVal', 'aInt': '1'})
 
     def step_009(self):
         print("insert valid data...")
-        result = self.table.insert({'aKey':'KeyVal1', 'aString':'StrVal', 'aInt':'1'})
+        result = self.table.insert({'aKey': 'KeyVal1', 'aString': 'StrVal', 'aInt': '1'})
         self.assertEqual(result, True)
 
     def step_010(self):
         print("insert duplicate key...")
-        result = self.table.insert({'aKey':'KeyVal1', 'aString':'StrVal', 'aInt':'1'})
+        result = self.table.insert({'aKey': 'KeyVal1', 'aString': 'StrVal', 'aInt': '1'})
         self.assertEqual(result, False)
 
     def step_011(self):
         print("insert move valid data...")
-        result = self.table.insert({'aKey':'KeyVal2', 'aString':'StrVal', 'aInt':'1'})
+        result = self.table.insert({'aKey': 'KeyVal2', 'aString': 'StrVal', 'aInt': '1'})
         self.assertEqual(result, True)
 
     def step_012(self):
         print("insert empty value in a NOT NULL constraint...")
-        result = self.table.insert({'aString':'StrVal', 'aInt':'1'})
+        result = self.table.insert({'aString': 'StrVal', 'aInt': '1'})
         self.assertEqual(result, False)
 
     def step_013(self):
         print("update 1st row...")
-        result = self.table.update(1, {'aString':'UpdatedStrVal'})
+        result = self.table.update(1, {'aString': 'UpdatedStrVal'})
         self.assertEqual(result, True)
 
     def step_014(self):
         print("update invalid field...")
 
         with self.assertRaises(pda.PDAException):
-            result = self.table.update(1, {'xString':'UpdatedStrVal'})
+            self.table.update(1, {'xString': 'UpdatedStrVal'})
 
     def step_015(self):
         print("update non existing id...")
-        result = self.table.update(999, {'aString':'UpdatedStrVal'})
+        result = self.table.update(999, {'aString': 'UpdatedStrVal'})
         self.assertEqual(result, False)
 
     def step_016(self):
@@ -156,7 +162,7 @@ class PdaTest(unittest.TestCase):
 
     def step_023(self):
         print("insert and delete...")
-        result = self.table.insert({'aKey':'KeyVal3', 'aString':'StrVal', 'aInt':'1'})
+        result = self.table.insert({'aKey': 'KeyVal3', 'aString': 'StrVal', 'aInt': '1'})
         self.assertEqual(result, True)
         result = self.table.delete(3)
         self.assertEqual(result, True)
@@ -171,10 +177,10 @@ class PdaTest(unittest.TestCase):
     def step_025(self):
         print("begin / rollback transaction...")
         self.table.beginTransaction()
-        
+
         for i in range(10, 15):
-            self.table.insert({'aKey':f'KeyVal{i}', 'aString':'StrVal', 'aInt':f'{i}'})
-        
+            self.table.insert({'aKey': f'KeyVal{i}', 'aString': 'StrVal', 'aInt': f'{i}'})
+
         self.table.rollbackTransaction()
         result = self.table.count()
         self.assertEqual(result, 2)
@@ -182,10 +188,10 @@ class PdaTest(unittest.TestCase):
     def step_026(self):
         print("begin / commit transaction...")
         self.table.beginTransaction()
-        
+
         for i in range(10, 15):
-            self.table.insert({'aKey':f'KeyVal{i}', 'aString':'StrVal', 'aInt':f'{i}'})
-        
+            self.table.insert({'aKey': f'KeyVal{i}', 'aString': 'StrVal', 'aInt': f'{i}'})
+
         self.table.commitTransaction()
         result = self.table.count()
         self.assertEqual(result, 7)
@@ -282,10 +288,9 @@ class PdaTest(unittest.TestCase):
         self.assertEqual(result, True)
 
     def _steps(self):
-        x = dir(self)
         for name in dir(self):
             if name.startswith("step"):
-                yield name, getattr(self, name) 
+                yield name, getattr(self, name)
 
     def test_steps(self):
         for name, step in self._steps():
@@ -294,6 +299,7 @@ class PdaTest(unittest.TestCase):
             except Exception as e:
                 print(f"\nLAST DATABASE EXCEPTION: {pda.last_database_exception}")
                 self.fail("{} failed ({}: {})".format(step, type(e), e))
-      
+
+
 if __name__ == '__main__':
     unittest.main()

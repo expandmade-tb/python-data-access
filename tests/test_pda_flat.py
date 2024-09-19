@@ -2,11 +2,12 @@ import unittest
 from pathlib import Path
 from lib import pda
 
-#====================================================================
+# ====================================================================
 # Unittest V1.0.0
 #
 # flatfile database
-#====================================================================
+# ====================================================================
+
 
 class TestModel(pda.Table):
     _name: str = 'Person'
@@ -15,20 +16,20 @@ class TestModel(pda.Table):
         return pda.DDL(self._name) \
             .integer('aId', True, True, True) \
             .text('aKey', 64, True, True) \
-            .text('aString' ) \
+            .text('aString') \
             .integer('aInt')
 
 
 class PdaTest(unittest.TestCase):
     # params for a db connection
-    datapath='tests/data'
-    dbname='flat.db'
+    datapath = 'tests/data'
+    dbname = 'flat.db'
 
     db = None
     table = None
 
     def step_000(self):
-        print("Flat test setup...") 
+        print("Flat test setup...")
         Path(self.datapath).mkdir(exist_ok=True)
 
     def step_001(self):
@@ -62,44 +63,44 @@ class PdaTest(unittest.TestCase):
 
     def step_008(self):
         print("insert unknown field...")
-       
+
         with self.assertRaises(pda.PDAException):
-            result = self.table.insert({'xKey':'KeyVal', 'aString':'StrVal', 'aInt':'1'});   
+            self.table.insert({'xKey': 'KeyVal', 'aString': 'StrVal', 'aInt': '1'})
 
     def step_009(self):
         print("insert valid data...")
-        result = self.table.insert({'aKey':'KeyVal1', 'aString':'StrVal', 'aInt':'1'})
+        result = self.table.insert({'aKey': 'KeyVal1', 'aString': 'StrVal', 'aInt': '1'})
         self.assertEqual(result, True)
 
     def step_010(self):
         print("insert duplicate key...")
-        result = self.table.insert({'aKey':'KeyVal1', 'aString':'StrVal', 'aInt':'1', 'aId': '1'})
+        result = self.table.insert({'aKey': 'KeyVal1', 'aString': 'StrVal', 'aInt': '1', 'aId': '1'})
         self.assertEqual(result, False)
 
     def step_011(self):
         print("insert more valid data...")
-        result = self.table.insert({'aKey':'KeyVal2', 'aString':'StrVal', 'aInt':'1'})
+        result = self.table.insert({'aKey': 'KeyVal2', 'aString': 'StrVal', 'aInt': '1'})
         self.assertEqual(result, True)
 
     def step_012(self):
         print("insert empty value in a NOT NULL constraint...")
-        result = self.table.insert({'aString':'StrVal', 'aInt':'1'})
+        result = self.table.insert({'aString': 'StrVal', 'aInt': '1'})
         self.assertEqual(result, False)
 
     def step_013(self):
         print("update 1st row...")
-        result = self.table.update(1, {'aString':'UpdatedStrVal'})
+        result = self.table.update(1, {'aString': 'UpdatedStrVal'})
         self.assertEqual(result, True)
 
     def step_014(self):
         print("update invalid field...")
 
         with self.assertRaises(pda.PDAException):
-            result = self.table.update(1, {'xString':'UpdatedStrVal'})
+            self.table.update(1, {'xString': 'UpdatedStrVal'})
 
     def step_015(self):
         print("update non existing id...")
-        result = self.table.update(999, {'aString':'UpdatedStrVal'})
+        result = self.table.update(999, {'aString': 'UpdatedStrVal'})
         self.assertEqual(result, False)
 
     def step_016(self):
@@ -138,7 +139,7 @@ class PdaTest(unittest.TestCase):
 
     def step_022(self):
         print("insert and delete...")
-        result = self.table.insert({'aKey':'KeyVal3', 'aString':'StrVal', 'aInt':'1'})
+        result = self.table.insert({'aKey': 'KeyVal3', 'aString': 'StrVal', 'aInt': '1'})
         self.assertEqual(result, True)
         result = self.table.delete(3)
         self.assertEqual(result, True)
@@ -196,10 +197,9 @@ class PdaTest(unittest.TestCase):
         self.assertEqual(result, 0)
 
     def _steps(self):
-        x = dir(self)
         for name in dir(self):
             if name.startswith("step"):
-                yield name, getattr(self, name) 
+                yield name, getattr(self, name)
 
     def test_steps(self):
         for name, step in self._steps():
@@ -208,6 +208,7 @@ class PdaTest(unittest.TestCase):
             except Exception as e:
                 print(f"\nLAST DATABASE EXCEPTION: {pda.last_database_exception}")
                 self.fail("{} failed ({}: {})".format(step, type(e), e))
-      
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -1,9 +1,10 @@
 import unittest
 from lib import flat
 
+
 class FlatTest(unittest.TestCase):
-    datapath='tests/data'
-    dbname='flat.db'
+    datapath = 'tests/data'
+    dbname = 'flat.db'
     tablename = 'Person'
 
     db = None
@@ -20,7 +21,7 @@ class FlatTest(unittest.TestCase):
         if not self.db.tableExists(self.tablename):
             self.db.createTable(self.tablename)
 
-        ddl='PersonId integer primary_key autoincrement, first_name text, last_name text required, mail text'
+        ddl = 'PersonId integer primary_key autoincrement, first_name text, last_name text required, mail text'
         self.Persons = flat.FlatTable(self.db, self.tablename, ddl)
 
     def step_002(self):
@@ -45,8 +46,8 @@ class FlatTest(unittest.TestCase):
 
     def step_006(self):
         print("insert manual duplicate id...")
-        with self.assertRaises(Exception): 
-            result = self.Persons.insert({'PersonId': '2', 'first_name': 'Jane', 'last_name': 'Softwood'})
+        with self.assertRaises(Exception):
+            self.Persons.insert({'PersonId': '2', 'first_name': 'Jane', 'last_name': 'Softwood'})
 
     def step_007(self):
         print("delete...")
@@ -82,12 +83,10 @@ class FlatTest(unittest.TestCase):
         result = self.Persons.count()
         self.assertEqual(result, 3)
 
-
     def _steps(self):
-        x = dir(self)
         for name in dir(self):
             if name.startswith("step"):
-                yield name, getattr(self, name) 
+                yield name, getattr(self, name)
 
     def test_steps(self):
         for name, step in self._steps():
@@ -95,6 +94,7 @@ class FlatTest(unittest.TestCase):
                 step()
             except Exception as e:
                 self.fail("{} failed ({}: {})".format(step, type(e), e))
-      
+
+
 if __name__ == '__main__':
     unittest.main()
