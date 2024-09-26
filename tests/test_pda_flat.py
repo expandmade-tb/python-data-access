@@ -1,9 +1,9 @@
 import unittest
 from pathlib import Path
-from lib import pda
+from easydb import pda
 
 # ====================================================================
-# Unittest V1.0.0
+# Unittest V1.1.0
 #
 # flatfile database
 # ====================================================================
@@ -12,7 +12,7 @@ from lib import pda
 class TestModel(pda.Table):
     _name: str = 'Person'
 
-    def DDL(self):
+    def ddl(self):
         return pda.DDL(self._name) \
             .integer('aId', True, True, True) \
             .text('aKey', 64, True, True) \
@@ -34,7 +34,7 @@ class PdaTest(unittest.TestCase):
 
     def step_001(self):
         print("connect to flat database...")
-        self.db = pda.Database().DbFlat(self.datapath, self.dbname)
+        self.db = pda.Database().db_flat(self.datapath, self.dbname)
 
     def step_002(self):
         print("open table...")
@@ -53,12 +53,12 @@ class PdaTest(unittest.TestCase):
 
     def step_006(self):
         print("primary key...")
-        result = ",".join(self.table.primaryKey().values())
+        result = ",".join(self.table.primarykey().values())
         self.assertEqual('aId', result)
 
     def step_007(self):
         print("fieldList...")
-        result = self.table.fieldList()
+        result = self.table.fieldlist()
         self.assertEqual('aId, aKey, aString, aInt', result)
 
     def step_008(self):
@@ -132,7 +132,7 @@ class PdaTest(unittest.TestCase):
 
     def step_021(self):
         print("findfirst order...")
-        result = self.table.orderBy('aKey').findFirst()
+        result = self.table.orderby('aKey').findfirst()
         self.assertIsNot(result, False)
         self.assertIsNotNone(result)
         self.assertEqual(result['aString'], 'UpdatedStrVal')
@@ -146,53 +146,53 @@ class PdaTest(unittest.TestCase):
 
     def step_023(self):
         print("findall...")
-        result = self.table.findAll()
+        result = self.table.findall()
         self.assertIsNot(result, False)
         self.assertIsNotNone(result)
         self.assertEqual(len(result), 2)
 
     def step_024(self):
         print("findall limit...")
-        result = self.table.limit(2).findAll()
+        result = self.table.limit(2).findall()
         self.assertIsNot(result, False)
         self.assertIsNotNone(result)
         self.assertEqual(len(result), 2)
 
     def step_025(self):
         print("findall where orderby...")
-        result = self.table.where('aInt', 1).orderBy('aKey').findAll()
+        result = self.table.where('aInt', 1).orderby('aKey').findall()
         self.assertEqual(result[0]['aId'], '1')
 
     def step_026(self):
         print("inject or 1=1...")
-        result = self.table.where('aInt', '1 or 1=1').findAll()
+        result = self.table.where('aInt', '1 or 1=1').findall()
         self.assertEqual(len(result), 0)
 
     def step_027(self):
         print('inject or ""=""...')
-        result = self.table.where('aId', '2 or ""=""').where('aString', 'StrVal or ""=""').findAll()
+        result = self.table.where('aId', '2 or ""=""').where('aString', 'StrVal or ""=""').findall()
         self.assertEqual(len(result), 0)
 
     def step_028(self):
         print('inject batched SQL...')
-        result = self.table.where('aId', '1; drop table Person').findAll()
+        result = self.table.where('aId', '1; drop table Person').findall()
         self.assertEqual(len(result), 0)
 
     def step_029(self):
         print('inject "--...')
-        result = self.table.where('aId', '2 "--').where('aString', 'StrVal').findAll()
+        result = self.table.where('aId', '2 "--').where('aString', 'StrVal').findall()
         self.assertEqual(len(result), 0)
 
     def step_030(self):
         print("update all...")
-        result = self.table.where('aInt', 1).updateAll({'aInt': '99'})
+        result = self.table.where('aInt', 1).updateall({'aInt': '99'})
         self.assertEqual(result, True)
         result = self.table.where('aInt', 99).count()
         self.assertEqual(result, 2)
 
     def step_031(self):
         print("delete all...")
-        result = self.table.where('aInt', 99).deleteAll()
+        result = self.table.where('aInt', 99).deleteall()
         result = self.table.count()
         self.assertEqual(result, 0)
 
@@ -206,7 +206,7 @@ class PdaTest(unittest.TestCase):
             try:
                 step()
             except Exception as e:
-                print(f"\nLAST DATABASE EXCEPTION: {pda.last_database_exception}")
+                print(f"\nLAST DATABASE EXCEPTION: {pda.LAST_DATABASE_EXCEPTION}")
                 self.fail("{} failed ({}: {})".format(step, type(e), e))
 
 

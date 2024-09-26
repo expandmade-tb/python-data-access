@@ -1,25 +1,29 @@
-import sqlite3
-import mysql.connector
+"""
+module v1.3.0
+Data-Access-Layer and query builder for MySQL and SQLite
+"""
+
 import re
 import csv
-from lib import flat
 import operator
 import warnings
+import sqlite3
+import mysql.connector
+from . import flat
 
-# ====================================================================
-# PDA V1.2.0
-#
-# Data-Access-Layer and query builder for MySQL and SQLite
-# ====================================================================
-
-last_database_exception: str = ''
+LAST_DATABASE_EXCEPTION: str = ''
 
 
 class PDAException(Exception):
-    pass
+    """
+    base exception class for this module
+    """
 
 
 class DDL():
+    """
+    class to build the data description language for the connected database
+    """
     __table: str = ''
     __primary_key: str = ''
     __fields: dict = {}
@@ -37,10 +41,16 @@ class DDL():
         self.__unique_constraint: list = []
 
     def integer(self, name: str, not_null: bool = False, auto_increment: bool = False, unique: bool = False, default: int = None):
+        """
+        create an integer columnt
+        """
         self.__fields[name] = {'type': 'integer', 'not_null': not_null, 'auto_increment': auto_increment, 'unique': unique, 'default': default}
         return self
 
     def text(self, name: str, size: int = 255, not_null: bool = False, unique: bool = False, default: str = None):
+        """
+        create a text columnt
+        """
         if default is not None:
             default = f'"{default}"'
 
@@ -48,38 +58,65 @@ class DDL():
         return self
 
     def real(self, name: str, not_null: bool = False, default: float = None):
+        """
+        create a number columnt
+        """
         self.__fields[name] = {'type': 'real', 'not_null': not_null, 'auto_increment': False, 'unique': False, 'default': default}
         return self
 
     def blob(self, name: str, not_null: bool = False):
+        """
+        create a blob columnt
+        """
         self.__fields[name] = {'type': 'blob', 'not_null': not_null, 'auto_increment': False, 'unique': False}
         return self
 
     def datetime(self, name: str, not_null: bool = False, unique: bool = False, default: str = None):
+        """
+        create a datetime columnt
+        """
         self.__fields[name] = {'type': 'datetime', 'not_null': not_null, 'auto_increment': False, 'unique': unique, 'default': default}
         return self
 
     def numeric(self, name: str, not_null: bool = False, default: float = None):
+        """
+        create a number columnt
+        """
         self.__fields[name] = {'type': 'numeric', 'not_null': not_null, 'auto_increment': False, 'unique': False, 'default': default}
         return self
 
-    def unique(self, fields: str):
-        self.__unique.append(fields)
+    def unique(self, field: str):
+        """
+        create a single unique column constraint
+        """
+        self.__unique.append(field)
         return self
 
     def unique_constraint(self, fields: str):
+        """
+        create a multiple unique columns constraint
+        """
         self.__unique_constraint.append(fields)
         return self
 
     def primary_key(self, fields: str):
+        """
+        create a primary key
+        """
         self.__primary_key = fields
         return self
 
     def foreign_key(self, fields: str, parent_table: str, primary_key: any):
+        """
+        create a foreign kez
+        """
         self.__foreign_keys[fields] = {'parent_table': parent_table, 'primary_key': primary_key}
         return self
 
     def index(self, fields: str, index_name: str = ''):
+        """
+        create an index
+        """
         if index_name:
             i = self.__indexes.count() + 1
             index_name = f"idx_{self.__table}_{i}"
@@ -89,11 +126,14 @@ class DDL():
         self.__indexes[index_name] = fields
         return self
 
-    def createSQ3(self) -> str:
+    def create_sq3(self) -> str:
+        """
+        build the ddl for sqlite database
+        """
         sql = f"create table {self.__table} ("
 
         for field, values in self.__fields.items():
-            type = values['type'].upper()
+            column_type = str(values['type']).upper()
             not_null = ' NOT NULL' if values['not_null'] is True else ''
             default = '' if values['default'] is None else f" DEFAULT {values['default']}"
 
@@ -102,7 +142,7 @@ class DDL():
                 not_null = ''
 
             unique = ' UNIQUE' if values['unique'] is True and values['auto_increment'] is not True else ''
-            sql += f"{field} {type}{not_null}{default}{unique}, "
+            sql += f"{field} {column_type}{not_null}{default}{unique}, "
 
         if self.__primary_key:
             sql += f"PRIMARY KEY({self.__primary_key}), "
@@ -113,7 +153,7 @@ class DDL():
 
         if self.__unique_constraint:
             for key, value in enumerate(self.__unique_constraint):
-                constraint_name = value['parent_table']
+                constraint_name = f"{self.__table}_constraint{key}"
                 sql = f"CONSTRAINT {constraint_name} UNIQUE ({value}), "
 
         if self.__foreign_keys:
@@ -132,23 +172,26 @@ class DDL():
 
         return sql
 
-    def createMSQ(self) -> str:
+    def create_msq(self) -> str:
+        """
+        build the ddl for mysql database
+        """
         sql = f"create table {self.__table} ("
 
         for field, values in self.__fields.items():
             if values['type'] == 'integer':
-                type = 'INT'
+                column_type = 'INT'
             elif values['type'] == 'text':
                 size = values['size']
-                type = f"VARCHAR({size})"
+                column_type = f"VARCHAR({size})"
             elif values['type'] == 'real':
-                type = 'FLOAT'
+                column_type = 'FLOAT'
             elif values['type'] == 'blob':
-                type = 'BLOB'
+                column_type = 'BLOB'
             elif values['type'] == 'datetime':
-                type = 'DATETIME'
+                column_type = 'DATETIME'
             else:
-                type = 'INT'
+                column_type = 'INT'
 
             not_null = ' NOT NULL' if values['not_null'] is True else ''
 
@@ -162,7 +205,7 @@ class DDL():
                 self.unique(field)
 
             default = '' if values['default'] is None else f" DEFAULT {values['default']}"
-            sql += f"{field} {type}{not_null}{default}{auto_increment}, "
+            sql += f"{field} {column_type}{not_null}{default}{auto_increment}, "
 
         if self.__primary_key:
             sql += f"PRIMARY KEY({self.__primary_key}), "
@@ -173,7 +216,7 @@ class DDL():
 
         if self.__unique_constraint:
             for key, value in enumerate(self.__unique_constraint):
-                constraint_name = value['parent_table']
+                constraint_name = f"{self.__table}_constraint{key}"
                 sql = f"CONSTRAINT {constraint_name} UNIQUE ({value}), "
 
         if self.__foreign_keys:
@@ -192,14 +235,17 @@ class DDL():
 
         return sql
 
-    def createFlat(self) -> str:
+    def create_flat(self) -> str:
+        """
+        build the ddl for flatfile database
+        """
         sql = ''
 
         for field, values in self.__fields.items():
             autoincrment = ''
             required = 'REQUIRED' if values['not_null'] is True else ''
 
-            type = str(values['type']).upper()
+            column_type = str(values['type']).upper()
 
             if values['auto_increment'] is True:
                 autoincrment = 'AUTOINCREMENT'
@@ -210,30 +256,39 @@ class DDL():
                 self.__primary_key = field
 
             if self.__primary_key and self.__primary_key == field:
-                sql += f"{field} {type} PRIMARY_KEY {autoincrment}, "
+                sql += f"{field} {column_type} PRIMARY_KEY {autoincrment}, "
             else:
-                sql += f"{field} {type} {required}, "
+                sql += f"{field} {column_type} {required}, "
 
         return sql[:-2]
 
 
 class Singleton(type):
-    _instances = {}
+    """
+    metaclass in order to create a singleton
+    """
+    instances = {}
 
     def __call__(cls, *args, **kwargs):
-        if cls not in cls._instances:
+        if cls not in cls.instances:
             instance = super().__call__(*args, **kwargs)
-            cls._instances[cls] = instance
+            cls.instances[cls] = instance
 
-        return cls._instances[cls]
+        return cls.instances[cls]
 
 
 class Database(metaclass=Singleton):
+    """
+    class to deal with the different databases
+    """
     __dbname = None
     __connection = None
     __dbtype = None
 
-    def DbSQ3(self, filename=''):
+    def db_sq3(self, filename=''):
+        """
+        create a connection to a sqlite database
+        """
         self.__dbname = filename
         self.__dbtype = 'SQ3'
         self.__connection = sqlite3.connect(self.__dbname)
@@ -242,25 +297,43 @@ class Database(metaclass=Singleton):
         self.__connection.execute("PRAGMA foreign_keys = 1")  # we want fk always checked
         return self
 
-    def DbMSQ(self, dbhost: str = '', dbname: str = '', dbuser: str = '', dbpass: str = ''):
+    def db_msq(self, dbhost: str = '', dbname: str = '', dbuser: str = '', dbpass: str = ''):
+        """
+        create a connection to a mysql database
+        """
         self.__dbname = dbname
         self.__dbtype = 'MSQ'
         self.__connection = mysql.connector.connect(host=dbhost, database=dbname, user=dbuser, password=dbpass)
         return self
 
-    def DbFlat(self, path: str, name: str):
+    def db_flat(self, path: str, name: str):
+        """
+        create a connection with a flatfile database
+        """
         self.__dbname = name
         self.__dbtype = 'FLAT'
         self.__connection = flat.FlatDatabase(path, name).connect()
         return self
 
     def dbtype(self) -> str:
+        """
+        returns the type of database
+        - SQ3: SQLite
+        - MSQ> MySQL
+        - FLAT: Flatfile
+        """
         return self.__dbtype
 
     def connection(self):
+        """
+        returns the database connection
+        """
         return self.__connection
 
     def name(self):
+        """
+        returns the database name
+        """
         return self.__dbname
 
     def execute(self, stmt, params=None):
@@ -278,14 +351,17 @@ class Database(metaclass=Singleton):
                 self.__connection.execute(stmt, params)
 
             return True
-        except Exception as e:
-            global last_database_exception
-            last_database_exception = str(e)
+        except Exception as pdaex:  # pylint: disable=broad-except
+            global LAST_DATABASE_EXCEPTION  # pylint: disable=global-statement
+            LAST_DATABASE_EXCEPTION = str(pdaex)
             return False
 
     @staticmethod
-    def isInitialized():
-        return len(Singleton._instances) > 0
+    def isinitialized():
+        """
+        returns if the singleton is already initialized
+        """
+        return len(Singleton.instances) > 0
 
     @staticmethod
     def fetchone(cursor, stmt, params=None):
@@ -306,12 +382,12 @@ class Database(metaclass=Singleton):
 
             if result is None:
                 return None
-            else:
-                return dict(result)
 
-        except Exception as e:
-            global last_database_exception
-            last_database_exception = str(e)
+            return dict(result)
+
+        except Exception as pdaex:  # pylint: disable=broad-except
+            global LAST_DATABASE_EXCEPTION  # pylint: disable=global-statement
+            LAST_DATABASE_EXCEPTION = str(pdaex)
             return False
 
     @staticmethod
@@ -333,15 +409,17 @@ class Database(metaclass=Singleton):
 
             if result is None:
                 return None
-            else:
-                for i in range(len(result)):
-                    result[i] = dict(result[i])
 
-                return result
+            retvalue = []
 
-        except Exception as e:
-            global last_database_exception
-            last_database_exception = str(e)
+            for i, data in enumerate(result):  # pylint: disable=unused-variable
+                retvalue.append(dict(data))
+
+            return retvalue
+
+        except Exception as pdaex:  # pylint: disable=broad-except
+            global LAST_DATABASE_EXCEPTION  # pylint: disable=global-statement
+            LAST_DATABASE_EXCEPTION = str(pdaex)
             return False
 
     @staticmethod
@@ -361,13 +439,16 @@ class Database(metaclass=Singleton):
                 cursor.execute(stmt, params)
 
             return True
-        except Exception as e:
-            global last_database_exception
-            last_database_exception = str(e)
+        except Exception as pdaex:  # pylint: disable=broad-except
+            global LAST_DATABASE_EXCEPTION  # pylint: disable=global-statement
+            LAST_DATABASE_EXCEPTION = str(pdaex)
             return False
 
 
 class Table():
+    """
+    dealing with a table in the database
+    """
     _name: str = ''
     _ddl: DDL = None
     _where_pending = []
@@ -383,45 +464,50 @@ class Table():
         if name:
             self._name = name
 
-        self._ddl = self.DDL()
+        self._ddl = self.ddl()
         self._where_pending = []
 
-        if Database.isInitialized():
-            type = Database().dbtype()
+        if Database.isinitialized():
+            dbtype = Database().dbtype()
 
-            if type == 'SQ3':
+            if dbtype == 'SQ3':
                 self.instance = TableSQ3(self._name, create_stmt, self._ddl)
-            elif type == 'MSQ':
+            elif dbtype == 'MSQ':
                 self.instance = TableMSQ(self._name, create_stmt, self._ddl)
-            elif type == 'FLAT':
-                self.instance = TableFlat(self._name, create_stmt, self._ddl)
+            elif dbtype == 'FLAT':
+                self.instance = TableFlat(self._name, self._ddl)
             else:
                 pass
         else:
             raise PDAException("no database connection found")
 
-    def DDL(self):
+    @staticmethod
+    def ddl():
         """
         method should be overwritten by using the DDL class
         """
         return ''
 
     @staticmethod
-    def getSQL(filename: str):
+    def getsql(filename: str):
+        """
+        get a sql statement from a file
+        """
         try:
-            with open(filename, 'r') as file:
+            with open(filename, 'r', encoding="ascii") as file:
                 return file.read()
         except OSError:
             return False
 
-    def quote(self, s: str) -> str:
+    @staticmethod
+    def quote(stringvalue: str) -> str:
         """
         places a given string in single quotes
         -
-        - s: the string
+        - stringvalue: the string
         - return: the string in quotes
         """
-        return self.instance.quote(s)
+        return TableBaseClass.quote(stringvalue)
 
     def database(self) -> Database:
         """
@@ -436,19 +522,19 @@ class Table():
         """
         return self.instance.tablename/()
 
-    def primaryKey(self) -> str:
+    def primarykey(self) -> str:
         """
         returns the tables primary key
         -
         """
-        return self.instance.primaryKey()
+        return self.instance.primarykey()
 
-    def fieldList(self) -> str:
+    def fieldlist(self) -> str:
         """
         returns a list of fields in a comma separated string
         -
         """
-        return self.instance.fieldList()
+        return self.instance.fieldlist()
 
     def fields(self, field: str = '') -> dict:
         """
@@ -489,24 +575,24 @@ class Table():
         """
         return self.instance.insert(data, empty_is_null)
 
-    def delete(self, id) -> bool:
+    def delete(self, key) -> bool:
         """
         delete a row from the table
         -
-        - id: a single value or a tuple with ordered! primary key values
+        - key: a single value or a tuple with ordered! primary key values
         - return: True if successfull, otherwise False
         """
-        return self.instance.delete(id)
+        return self.instance.delete(key)
 
-    def deleteAll(self) -> bool:
+    def deleteall(self) -> bool:
         """
         deletees ALL ! rows from the table.
         -
         - return: True if successfull, otherwise False
         """
-        return self.instance.deleteAll()
+        return self.instance.deleteall()
 
-    def update(self, id, data: dict) -> bool:
+    def update(self, key, data: dict) -> bool:
         """
         updates a row from the table
         -
@@ -514,25 +600,25 @@ class Table():
         - data: fields and their values to update
         - return: True if successfull, otherwise False
         """
-        return self.instance.update(id, data)
+        return self.instance.update(key, data)
 
-    def updateAll(self, data: dict) -> bool:
+    def updateall(self, data: dict) -> bool:
         """
         updates ALL ! rows from the table.
         -
         - data: fields and their values to update
         - return: True if successfull, otherwise False
         """
-        return self.instance.updateAll(data)
+        return self.instance.updateall(data)
 
-    def find(self, id):
+    def find(self, key):
         """
         finds a row in the table
         -
         - id: a single value or a tuple with ordered! primary key values
         - return: dict if successfull, None when nothing found, False when sql is shit
         """
-        return self.instance.find(id)
+        return self.instance.find(key)
 
     def where(self, field: str, value: any, compare: str = '=', conditional: str = 'and'):
         """
@@ -562,22 +648,22 @@ class Table():
         """
         return self.instance.offset(offset)
 
-    def addIdentity(self, identify: bool = True):
+    def addidentity(self, identify: bool = True):
         """
         chain function
         -
         - identify: add unique identifier field to the selection
         """
-        return self.instance.addIdentity(identify)
+        return self.instance.addidentity(identify)
 
-    def orderBy(self, fields: str, direction: str = 'ASC'):
+    def orderby(self, fields: str, direction: str = 'ASC'):
         """
         chain function
         -
         - fields: comma separated list of fields
         - direction: ASC or DESC
         """
-        return self.instance.orderBy(fields, direction)
+        return self.instance.orderby(fields, direction)
 
     def count(self, select: str = '', prepared_params: tuple = ()) -> int:
         """
@@ -589,16 +675,16 @@ class Table():
         self._where_pending.clear()
         return self.instance.count(select, prepared_params)
 
-    def findFirst(self, select: str = '', prepared_params: tuple = ()):
+    def findfirst(self, select: str = '', prepared_params: tuple = ()):
         """
         finds the first row in the table
         -
         - select: the sql select statement
         - prepared_params: which values to pass to the statement
         """
-        return self.instance.findFirst(select, prepared_params)
+        return self.instance.findfirst(select, prepared_params)
 
-    def findAll(self, select: str = '', prepared_params: tuple = (), fetchone: bool = False):
+    def findall(self, select: str = '', prepared_params: tuple = (), fetchone: bool = False):
         """
         finds all rows in the table
         -
@@ -607,28 +693,28 @@ class Table():
         - fetchone: fetch the first row of the result
         """
         self._where_pending.clear()
-        return self.instance.findAll(select, prepared_params)
+        return self.instance.findall(select, prepared_params, fetchone)
 
-    def beginTransaction(self):
+    def begintransaction(self):
         """
         starts a transaction
         -
         """
-        return self.instance.beginTransaction()
+        return self.instance.begintransaction()
 
-    def commitTransaction(self):
+    def committransaction(self):
         """
         commits a transaction
         -
         """
-        return self.instance.commitTransaction()
+        return self.instance.committransaction()
 
-    def rollbackTransaction(self):
+    def rollbacktransaction(self):
         """
         rolls a transaction back
         -
         """
-        return self.instance.rollbackTransaction()
+        return self.instance.rollbacktransaction()
 
     def import_csv(self, **kwargs) -> bool:
         """
@@ -656,7 +742,7 @@ class Table():
         linecount = 0
         fields = []
 
-        with open(filename, mode='r') as importfile:
+        with open(filename, mode='r', encoding='utf-8') as importfile:
             reader = csv.reader(importfile, delimiter=separator, quotechar=enclosure, escapechar=escape, quoting=quoting)
 
             for row in reader:
@@ -714,7 +800,7 @@ class Table():
         offset = 0
         lines = 0
 
-        with open(filename, mode='w') as exportfile:
+        with open(filename, mode='w', encoding='utf-8') as exportfile:
             writer = csv.writer(exportfile, delimiter=separator, quotechar=enclosure, escapechar=escape, quoting=quoting)
             writer.writerow(fields)
 
@@ -724,7 +810,7 @@ class Table():
                         param_field, param_value, param_compare, param__conditional = values
                         self.where(param_field, param_value, param_compare, param__conditional)
 
-                data = self.limit(limit).offset(offset).findAll()
+                data = self.limit(limit).offset(offset).findall()
 
                 for data_row in data:
                     offset += 1
@@ -740,6 +826,9 @@ class Table():
 
 
 class TableBaseClass:
+    """
+    implements properties and functions for a database table
+    """
     _type: str = None
     _cursor = None
     _where_str: str = ''
@@ -758,6 +847,9 @@ class TableBaseClass:
     _ddl: DDL = None
 
     def __init__(self):
+        """
+        inits the class properties
+        """
         self._type: str = None
         self._cursor = None
         self._where_str: str = ''
@@ -774,33 +866,59 @@ class TableBaseClass:
         self._meta_data: list = []
         self._parameter_marker = '?'
         self._ddl: DDL = None
-        print('specific implementation missing')
 
-    def quote(self, s: str) -> str:
-        return "'" + s.replace("'", "''") + "'"
+    @staticmethod
+    def quote(stringvalue: str) -> str:
+        """
+        returns the passed string in quotes
+        """
+        return "'" + stringvalue.replace("'", "''") + "'"
 
     def database(self) -> Database:
+        """
+        returns the database the table belongs to
+        """
         return self._db
 
     def tablename(self) -> str:
+        """
+        returns the tablename
+        """
         return self._name
 
-    def primaryKey(self) -> str:
+    def primarykey(self) -> str:
+        """
+        returns the tables primary kez
+        """
         return self._pk
 
-    def fieldList(self) -> str:
+    def fieldlist(self) -> str:
+        """
+        returns a comma separated list of the table column names
+        """
         return ", ".join(self._fields.keys())
 
     def fields(self, field: str = ''):
+        """
+        returns a single field dictionary when a column names is passed or a dictionary
+        of all field dictionaries when left blank
+        """
         if not field:
             return self._fields
-        else:
-            return self._fields[field]
+
+        return self._fields[field]
 
     def name(self) -> str:
+        """
+        returns the name of the table
+        """
         return self._name
 
     def create(self, sql: str):
+        """
+        creates the table
+        - raises exception
+        """
         if not sql:
             raise PDAException("sql create statement is empty")
 
@@ -813,6 +931,10 @@ class TableBaseClass:
         return self
 
     def drop(self):
+        """
+        drops the table
+        - raises exception
+        """
         sql = f"DROP TABLE IF EXISTS {self._name};"
         result = Database.exec(self._cursor, sql)
 
@@ -822,6 +944,12 @@ class TableBaseClass:
         return self
 
     def insert(self, data: dict, empty_is_null: bool = True) -> bool:
+        """
+        inserts a row into the table.
+        - empty_is_null is used to decide if an empty string value '' should be inserted or left null
+        - raises exception when using an unkown column.
+        - returns true when the row cannot be inserted, otherwise false
+        """
         cols = '('
         params = ' values ('
         vals = []
@@ -830,7 +958,7 @@ class TableBaseClass:
             if value is None:
                 continue
 
-            if empty_is_null is True and type(value) is str and not value:
+            if empty_is_null is True and isinstance(value, str) and not value:
                 continue
 
             if field not in self._fields:
@@ -845,17 +973,24 @@ class TableBaseClass:
         sql = f"insert into {self._name} {cols} {params}"
         return Database.exec(self._cursor, sql, tuple(vals))
 
-    def delete(self, id) -> bool:
+    def delete(self, key) -> bool:
+        """
+        deletes a row from the table
+        - returns true if successfull, else false
+        """
         sql = f"delete from {self._name} where {self._pk_query}"
 
-        if type(id) is dict:
-            result = Database.exec(self._cursor, sql, tuple(id.values()))
+        if isinstance(key, dict):
+            result = Database.exec(self._cursor, sql, tuple(key.values()))
         else:
-            result = Database.exec(self._cursor, sql, (id, ))
+            result = Database.exec(self._cursor, sql, (key, ))
 
         return result
 
-    def deleteAll(self):
+    def deleteall(self):
+        """
+        deletes rows from the table
+        """
         sql = f"DELETE FROM {self._name}"
         params = {}
 
@@ -868,7 +1003,12 @@ class TableBaseClass:
         result = Database.exec(self._cursor, sql, params)
         return result
 
-    def update(self, id, data: dict) -> bool:
+    def update(self, key, data: dict) -> bool:
+        """
+        updates a single row
+        - key: the primary key
+        - data: column data to update
+        """
         sql = f"update  {self._name} set "
         vals = []
 
@@ -884,20 +1024,21 @@ class TableBaseClass:
 
         sql = sql[:-2] + f" where {self._pk_query}"
 
-        if type(id) is dict:
-            result = Database.exec(self._cursor, sql, tuple(data.values()) + tuple(id.values()))
+        if isinstance(key, dict):
+            result = Database.exec(self._cursor, sql, tuple(data.values()) + tuple(key.values()))
         else:
-            result = Database.exec(self._cursor, sql, tuple(data.values()) + (id, ))
+            result = Database.exec(self._cursor, sql, tuple(data.values()) + (key, ))
 
         if result is False:
             raise PDAException(f"data cannot be updated in table {self._name}")
 
-        if self._cursor.rowcount == 1:
-            return True
-        else:
-            return False
+        return self._cursor.rowcount == 1
 
-    def updateAll(self, data: dict) -> bool:
+    def updateall(self, data: dict) -> bool:
+        """
+        updates all rows
+        - data: column data to update
+        """
         sql = f"UPDATE {self._name} SET "
         vals = []
         params = {}
@@ -923,17 +1064,28 @@ class TableBaseClass:
         result = Database.exec(self._cursor, sql, tuple(vals) + params)
         return result
 
-    def find(self, id):
+    def find(self, key):
+        """
+        finds a single row in the table
+        - key: the primary key of the table
+        """
         sql = f"select * from {self._name} where {self._pk_query}"
 
-        if type(id) is dict:
-            result = Database.fetchone(self._cursor, sql, tuple(id.values()))
+        if isinstance(key, dict):
+            result = Database.fetchone(self._cursor, sql, tuple(key.values()))
         else:
-            result = Database.fetchone(self._cursor, sql, (id, ))
+            result = Database.fetchone(self._cursor, sql, (key, ))
 
         return result
 
     def where(self, field: str, value: any, compare: str = '=', conditional: str = 'and'):
+        """
+        chain function: where
+        - field: the fields name in the table
+        - value: the fields value
+        - compare: operator
+        - conditional operator
+        """
         if value is None:
             val = 'NULL'
         else:
@@ -948,22 +1100,44 @@ class TableBaseClass:
         return self
 
     def limit(self, limit: int = 0):
+        """
+        chain function: limit
+        - limit: maxmimum rows to selection
+        """
         self._limit = limit
         return self
 
     def offset(self, offset: int = 0):
+        """
+        chain function: offset
+        - offset: the offset to use
+        """
         self._offset = offset
         return self
 
-    def addIdentity(self, identify: bool = True):
+    def addidentity(self, identify: bool = True):
+        """
+        chain function: addIdentity
+        - addIdentity: adds an unique identifier to every selection
+        """
         self._identify = identify
         return self
 
-    def orderBy(self, fields: str, direction: str = 'ASC'):
+    def orderby(self, fields: str, direction: str = 'ASC'):
+        """
+        chain function: orderBy
+        - fields: how to sort the resulting selection
+        - direction: either ASC (ascending) or DESC (descending)
+        """
         self._orderby = fields + ' ' + direction
         return self
 
     def count(self, select: str = '', prepared_params: tuple = ()) -> int:
+        """
+        chain function: count the selected rows
+        - select: a select statement which will execute prior to a possible where statement
+        - prepared_params: list of parameters for the select statement
+        """
         if not select:
             sql = f"SELECT * FROM {self._name} "
         else:
@@ -990,18 +1164,30 @@ class TableBaseClass:
 
         if result is False:
             return 0
-        else:
-            return result['count']
 
-    def findFirst(self, select: str = '', prepared_params: tuple = ()):
-        result = self.limit(1).findAll(select, prepared_params, True)
+        return result['count']
+
+    def findfirst(self, select: str = '', prepared_params: tuple = ()):
+        """
+        finds the first row in a selectc
+        - select: the sql select statement
+        - prepared_params: which values to pass to the statement
+        """
+        result = self.limit(1).findall(select, prepared_params, True)
         return result
 
-    def findAll(self, select: str = '', prepared_params: tuple = (), fetchone: bool = False):
-        pk = next(iter(self._pk.values()))
+    def findall(self, select: str = '', prepared_params: tuple = (), fetchone: bool = False):
+        """
+        finds all rows in the table
+        -
+        - select: the sql select statement
+        - prepared_params: which values to pass to the statement
+        - fetchone: fetch the first row of the result
+        """
+        pkey = next(iter(self._pk.values()))
 
         if self._identify is True:
-            include_rowid = f", {pk} as row_identifier "
+            include_rowid = f", {pkey} as row_identifier "
         else:
             include_rowid = ""
 
@@ -1041,25 +1227,38 @@ class TableBaseClass:
             result = Database.fetchall(self._cursor, sql, params)
 
         if result is False:
-            raise PDAException(f"findAll data from table {self._name} failed")
+            raise PDAException(f"findall data from table {self._name} failed")
 
         return result
 
-    def beginTransaction(self):
+    def begintransaction(self):
+        """
+        starts a transaction
+        """
         Database.exec(self._cursor, "BEGIN")
         return self
 
-    def commitTransaction(self):
+    def committransaction(self):
+        """
+        commits a transaction
+        """
         Database.exec(self._cursor, "COMMIT")
         return self
 
-    def rollbackTransaction(self):
+    def rollbacktransaction(self):
+        """
+        rolls back a transaction
+        """
         Database.exec(self._cursor, "ROLLBACK")
         return self
 
 
 class TableSQ3(TableBaseClass):
-    def __init__(self, name: str, create_stmt: str, DDL=None, type: str = 'table'):
+    """
+    handles a sqlite table
+    """
+
+    def __init__(self, name: str, create_stmt: str, DDLdef=None, typedef: str = 'table'):
         """
         init class
         -
@@ -1067,29 +1266,30 @@ class TableSQ3(TableBaseClass):
         - create_stmt: either a sql statment or a DDL callable
         - type: either 'table' or 'view'
         """
-        self._type = type
+        super().__init__()
+        self._type = typedef
         self._name = name
-        self._ddl = DDL
+        self._ddl = DDLdef
         self._parameter_marker = '?'
         self._db = Database()
 
         name = self.quote(name)
-        type = self.quote(type)
+        qtype = self.quote(typedef)
         self._cursor = self._db.connection().cursor()
 
-        stmt = f"SELECT count(*) as count FROM sqlite_master WHERE type={type} AND name={name};"
+        stmt = f"SELECT count(*) as count FROM sqlite_master WHERE type={qtype} AND name={name};"
         result = Database.fetchone(self._cursor, stmt)
 
         if result['count'] == 0:  # table does not exist
             if create_stmt is True:
                 self.create(create_stmt)  # create it with passed create stmt
             else:
-                self.create(self._ddl.createSQ3())
+                self.create(self._ddl.create_sq3())
 
         stmt = f"PRAGMA table_info({name})"
         self._meta_data = Database.fetchall(self._cursor, stmt)
 
-        if self._meta_data is None or False:
+        if not self._meta_data:
             raise PDAException(f"cannot retrieve metadata from table {name}")
 
         for value in self._meta_data:  # building field dictionary from meta data
@@ -1099,9 +1299,9 @@ class TableSQ3(TableBaseClass):
                 self._pk[keynum] = name
                 self._pk_query += f"{name}={self._parameter_marker} and "
 
-            self._fields[value['name']] = {'type': value['type'], 'default': value['dflt_value'], 'required': True if value['notnull'] == 1 else False}
+            self._fields[value['name']] = {'type': value['type'], 'default': value['dflt_value'], 'required': value['notnull'] == 1}
 
-        if not self._pk and type == 'table':  # a primary key for a table is mandatory
+        if not self._pk and typedef == 'table':  # a primary key for a table is mandatory
             raise PDAException(f"table {name} no primary key defined")
 
         if self._pk_query:
@@ -1112,7 +1312,11 @@ class TableSQ3(TableBaseClass):
 
 
 class TableMSQ(TableBaseClass):
-    def __init__(self, name: str, create_stmt: str, DDL=None, type: str = 'table'):
+    """
+    handles a mysql table
+    """
+
+    def __init__(self, name: str, create_stmt: str, DDLdef=None, typedef: str = 'table'):
         """
         init class
         -
@@ -1120,9 +1324,10 @@ class TableMSQ(TableBaseClass):
         - create_stmt: either a sql statment or a DDL callable
         - type: either 'table' or 'view'
         """
-        self._type = type
+        super().__init__()
+        self._type = typedef
         self._name = name
-        self._ddl = DDL
+        self._ddl = DDLdef
         self._parameter_marker = '%s'
         self._db = Database()
 
@@ -1134,12 +1339,12 @@ class TableMSQ(TableBaseClass):
             if create_stmt is True:
                 self.create(create_stmt)  # create it with passed create stmt
             else:
-                self.create(self._ddl.createMSQ())
+                self.create(self._ddl.create_msq())
 
         stmt = f"DESCRIBE {name}"
         self._meta_data = Database.fetchall(self._cursor, stmt)
 
-        if self._meta_data is None or False:
+        if not self._meta_data:
             raise PDAException(f"cannot retrieve metadata from table {name}")
 
         for key, value in enumerate(self._meta_data):  # building field dictionary from meta data
@@ -1149,9 +1354,9 @@ class TableMSQ(TableBaseClass):
                 self._pk[keynum] = name
                 self._pk_query += f"{name}={self._parameter_marker} and "
 
-            self._fields[value['Field']] = {'type': value['Type'], 'default': value['Default'], 'required': True if value['Null'] == 'NO' else False}
+            self._fields[value['Field']] = {'type': value['Type'], 'default': value['Default'], 'required': value['Null'] == 'NO'}
 
-        if not self._pk and type == 'table':  # a primary key for a table is mandatory
+        if not self._pk and typedef == 'table':  # a primary key for a table is mandatory
             raise PDAException(f"table {name} no primary key defined")
 
         if self._pk_query:
@@ -1162,105 +1367,106 @@ class TableMSQ(TableBaseClass):
 
 
 class TableFlat(TableBaseClass):
+    """
+    handles a flatfile table
+    """
+
     __table: flat.FlatTable
 
-    def __init__(self, name: str, create_stmt: str, DDL=None, type: str = 'table'):
-        self._type = type
+    def __init__(self, name: str, DDLdef=None, typedef: str = 'table'):
+        super().__init__()
+        self._type = typedef
         self._name = name
-        self._ddl = DDL
+        self._ddl = DDLdef
         self._parameter_marker = ''
         self._db = Database().connection()
-        self.__table = flat.FlatTable(self._db, self._name, self._ddl.createFlat())
+        self.__table = flat.FlatTable(self._db, self._name, self._ddl.create_flat())
         self._meta_data.clear()
         self._fields = self.__table.fields()
-        self._pk[0] = self.__table.primaryKey()  # we can have only a single field as primary key
+        self._pk[0] = self.__table.primary_key()  # we can have only a single field as primary key
 
-        if not self._db.tableExists(self._name):
+        if not self._db.table_exists(self._name):
             self.create('')
 
     def create(self, sql: str):
-        self._db.createTable(self._name)
+        self._db.create_table(self._name)
         return self
 
     def drop(self):
-        self._db.dropTable(self._name)
+        self._db.drop_table(self._name)
         return self
 
     def insert(self, data: dict, empty_is_null: bool = True) -> bool:
         try:
             return self.__table.insert(data)
-            return True
         except flat.FlatTableException:
             return False
-        except flat.FlatValidationException as e:
-            raise PDAException(e.args)
+        except flat.FlatValidationException as pdaex:
+            raise PDAException(pdaex.args) from pdaex
 
-    def delete(self, id) -> bool:
-        return self.__table.delete(id)
+    def delete(self, key) -> bool:
+        return self.__table.delete(key)
 
-    def deleteAll(self):
-        for id in self.__table.findAll(limit=self._limit, offset=self._offset, return_ids=True):
-            self.delete(id)
+    def deleteall(self):
+        for key in self.__table.findall(limit=self._limit, offset=self._offset, return_ids=True):
+            self.delete(key)
 
         self._limit = 0
         self._offset = 0
 
-    def update(self, id, data: dict) -> bool:
+    def update(self, key, data: dict) -> bool:
         try:
-            result = self.__table.update(id, data)
+            result = self.__table.update(key, data)
 
             if result is False:
                 return False
-            else:
-                return True
+
+            return True
         except flat.FlatTableException:
             return False
-        except flat.FlatValidationException as e:
-            raise PDAException(e.args)
+        except flat.FlatValidationException as pdaex:
+            raise PDAException(pdaex.args) from pdaex
 
-    def updateAll(self, data: dict) -> bool:
-        for id in self.__table.findAll(limit=self._limit, offset=self._offset, return_ids=True):
-            self.update(id, data)
+    def updateall(self, data: dict) -> bool:
+        for key in self.__table.findall(limit=self._limit, offset=self._offset, return_ids=True):
+            self.update(key, data)
 
         self._limit = 0
         self._offset = 0
         return True
 
-    def find(self, id):
-        return self.__table.find(id)
+    def find(self, key):
+        return self.__table.find(key)
 
     def where(self, field: str, value: any, compare: str = '=', conditional: str = 'and'):
         self.__table.where(field, value, compare, conditional)
         return self
 
-    def addIdentity(self, identify: bool = True):
+    def addidentity(self, identify: bool = True):
         raise NotImplementedError()
 
     def count(self, select: str = '', prepared_params: tuple = ()) -> int:
         return self.__table.count()
 
-    def findFirst(self, select: str = '', prepared_params: tuple = ()):
-        result = self.findAll()
+    def findfirst(self, select: str = '', prepared_params: tuple = ()):
+        result = self.findall()
 
         if len(result) > 0:
             return result[0]
-        else:
-            return False
 
-    def findAll(self, select: str = '', prepared_params: tuple = (), fetchone: bool = False):
+        return False
+
+    def findall(self, select: str = '', prepared_params: tuple = (), fetchone: bool = False):
         if self._orderby and (self._limit > 0 or self._offset > 0):
             # for computers memory sake, execution order of limit, offset and order_by is in reverse order.
             # therefore results are different from real databases, the order by is meant to be a sort of the
             # resuling rows
             warnings.warn('execution order of limit/offset and order by is reverse')
 
-        result = self.__table.findAll(limit=self._limit, offset=self._offset)
+        result = self.__table.findall(limit=self._limit, offset=self._offset)
 
-        if self._limit > 0:
-            self._limit = 0
-
-        if self._offset > 0:
-            self._offset = 0
+        self._limit = min(self._limit, 0)
+        self._offset = min(self._offset, 0)
 
         if self._orderby:
             criteria = self._orderby.strip().replace('  ', '').split(" ")
@@ -1269,16 +1475,16 @@ class TableFlat(TableBaseClass):
 
             if direction.upper() == 'DESC':
                 return sorted(result, key=operator.itemgetter(*criteria), reverse=True)
-            else:
-                return sorted(result, key=operator.itemgetter(*criteria))
-        else:
-            return result
 
-    def beginTransaction(self):
+            return sorted(result, key=operator.itemgetter(*criteria))
+
+        return result
+
+    def begintransaction(self):
         raise NotImplementedError()
 
-    def commitTransaction(self):
+    def committransaction(self):
         raise NotImplementedError()
 
-    def rollbackTransaction(self):
+    def rollbacktransaction(self):
         raise NotImplementedError()

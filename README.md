@@ -2,6 +2,22 @@
 
 The single module is trying to simplify the database access for your web application, preventing sql injections, making it easier to move from one database to another, offering a general interface to access the database.
 
+### Features
+
+- **Easy to use**: With a clear and intuitive API, you can get started quickly.
+
+- **Secure:** Using this API significantly reduces the risk of SQL injections 
+
+- **Scalable:**  You can start with the flat file database, move on to SQLite and then to MySQL without having to change your code
+
+### Installation
+
+`pip install python-data-access`
+
+------
+
+# Documentation
+
 ## Database
 
 Connecting to a database need to be done only once in your application. After that the connection will be found.
@@ -9,7 +25,7 @@ Connecting to a database need to be done only once in your application. After th
 ### SQLite
 
 ```python
-    db = pda.Database().DbSQ3('/somewhere/dbtest.sqlite')
+    db = pda.Database().db_sq3('/somewhere/dbtest.sqlite')
 ```
 
 ### MySql
@@ -18,14 +34,14 @@ Connecting to a database need to be done only once in your application. After th
     database='dbtest'
     user='dbuser'
     password='dbpassword'
-    db = pda.Database().DbMSQ(host, database, user, password)
+    db = pda.Database().db_msq(host, database, user, password)
 ```
 
 ### Flatfile
 
 ```python
     datapath='/somewhere'
-    db = pda.Database().DbFlat(datapath, 'dbtest.flat')
+    db = pda.Database().db_flat(datapath, 'dbtest.flat')
 
 ```
 
@@ -61,7 +77,7 @@ Opens a table and will create it if it doesnt exist:
     class Products(pda.Table):
         _name: str = 'Products'
 
-        def DDL(self):
+        def ddl(self):
             return pda.DDL(self._name) \
                 .integer('ProductId', True, True, True) \
                 .text('Description', 64, True, True) \
@@ -74,7 +90,7 @@ Opens a table and will create it if it doesnt exist:
 class OrderDetails(pda.Table):
     _name: str = 'OrderDetails'
 
-    def DDL(self):
+    def ddl(self):
         return pda.DDL(self._name) \
             .integer('OrderId', True) \
             .integer('Pos', True) \
@@ -122,7 +138,7 @@ or
     result = products.delete(1)
 
     # deletes all rows where the column Inactive is 1
-    result = products.where('Inactive',1).deleteAll()
+    result = products.where('Inactive',1).deleteall()
 ```
 
 ### Find a row
@@ -143,19 +159,19 @@ or
 
 ```python
     # selects 5 rows
-    result = products.limit(5).findAll()
+    result = products.limit(5).findall()
     
     # selects the 10 rows which are following after the 10th row
-    result = products.limit(10).offset(10).findAll()
+    result = products.limit(10).offset(10).findall()
 
     # select the first row
-    result = products.findFirst()
+    result = products.findfirst()
 
     # select the first 10 rows which are inactive sorted by description 
-    result = products.where('Inactive', 1).orderBy('Description').limit(10).findall()
+    result = products.where('Inactive', 1).orderby('Description').limit(10).findall()
 
     # select all positions from an order
-    result = order_details.where('OrderId', '2').findAll()
+    result = order_details.where('OrderId', '2').findall()
 ```
 
 ### A more complex select
@@ -181,15 +197,15 @@ Lets assume, the following statement is stored in file named PRODUCTION.SQL
 You can load this statement and pass it on:
 
 ```python
-        sql = products.getSQL('products.sql')
+        sql = products.getsql('products.sql')
 
         # select the first 10 rows from the above sql statement
-        result = products.limit(10).findAll(sql)
+        result = products.limit(10).findall(sql)
 
         # select all rows from the above sql statement where Desciption starts with A
-        result = products.where('Description', 'A%', 'like').findAll(sql)
+        result = products.where('Description', 'A%', 'like').findall(sql)
 ```
-       
+
 ### Import and export to csv file
 
 ```python

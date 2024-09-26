@@ -1,5 +1,11 @@
 import unittest
-from lib import flat
+from easydb import flat
+
+# ====================================================================
+# Unittest V1.1.0
+#
+# flatfile database
+# ====================================================================
 
 
 class FlatTest(unittest.TestCase):
@@ -13,20 +19,20 @@ class FlatTest(unittest.TestCase):
     def step_000(self):
         print("flat test setup...")
         self.db = flat.FlatDatabase(self.datapath, self.dbname).connect()
-        self.db.dropTable(self.tablename)
+        self.db.drop_table(self.tablename)
 
     def step_001(self):
         print("open / create table...")
 
-        if not self.db.tableExists(self.tablename):
-            self.db.createTable(self.tablename)
+        if not self.db.table_exists(self.tablename):
+            self.db.create_table(self.tablename)
 
         ddl = 'PersonId integer primary_key autoincrement, first_name text, last_name text required, mail text'
         self.Persons = flat.FlatTable(self.db, self.tablename, ddl)
 
     def step_002(self):
         print("primary key...")
-        result = self.Persons.primaryKey()
+        result = self.Persons.primary_key()
         self.assertEqual(result, 'PersonId')
 
     def step_003(self):

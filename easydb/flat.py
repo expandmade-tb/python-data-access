@@ -1,3 +1,8 @@
+"""
+module v1.2.0
+Flatfile database
+"""
+
 import os
 import shutil
 import fcntl
@@ -5,30 +10,35 @@ import json
 import re
 from pathlib import Path
 
-# ====================================================================
-# FLAT V1.1.0
-#
-# flatfile database
-# ====================================================================
-
 
 class FlatException(Exception):
-    pass
+    """
+    base exception class for this module
+    """
 
 
 class FlatDBException(FlatException):
-    pass
+    """
+    db exception class for this module
+    """
 
 
 class FlatTableException(FlatException):
-    pass
+    """
+    table exception class for this module
+    """
 
 
 class FlatValidationException(FlatException):
-    pass
+    """
+    validation exception class for this module
+    """
 
 
 class FlatDatabase():
+    """
+    flatfile database class which handles connection and properties
+    """
     __path: str = ''
     __name: str = ''
     __fullpath: str = ''
@@ -51,8 +61,8 @@ class FlatDatabase():
         if not os.path.exists(self.__path):
             raise FlatDBException(f"path to flat database {self.__name} not found")
 
-        if not self.databaseExists():
-            self.createDatabase()
+        if not self.database_exists():
+            self.create_database()
 
     def connect(self):
         """
@@ -65,14 +75,14 @@ class FlatDatabase():
         self.__connected = True
         return self
 
-    def databaseExists(self) -> bool:
+    def database_exists(self) -> bool:
         """
         checks if the database does exist
         -
         """
         return os.path.exists(self.__master)
 
-    def createDatabase(self):
+    def create_database(self):
         """
         creates the database
         -
@@ -86,14 +96,14 @@ class FlatDatabase():
         Path(self.__fullpath).mkdir()
         Path(self.__master).mkdir()
 
-    def fullPath(self) -> str:
+    def fullpath(self) -> str:
         """
         returns the path and database name as a path
         -
         """
         return self.__fullpath
 
-    def createTable(self, name: str):
+    def create_table(self, name: str):
         """
         creates a table in the database
         -
@@ -111,11 +121,11 @@ class FlatDatabase():
 
         sequence = f"{self.__master}{os.sep}.sequence_{name}"
 
-        with open(sequence, "w") as file:
+        with open(sequence, "w", encoding="utf-8") as file:
             sequence = 0
             file.write(str(sequence))
 
-    def dropTable(self, name: str):
+    def drop_table(self, name: str):
         """
         drops a table in the database
         -
@@ -137,7 +147,7 @@ class FlatDatabase():
         shutil.rmtree(location)
         os.remove(sequence)
 
-    def tableExists(self, name: str) -> bool:
+    def table_exists(self, name: str) -> bool:
         """
         checks if a table in the database exists
         -
@@ -161,7 +171,7 @@ class FlatDatabase():
         location = f"{self.__master}{os.sep}.sequence_{name}"
         sequence = 0
 
-        with open(location, "r+") as file:
+        with open(location, "r+", encoding="utf-8") as file:
             fcntl.flock(file, fcntl.LOCK_EX)
             sequence = int(file.read(9)) + 1
             file.seek(0)
@@ -173,6 +183,9 @@ class FlatDatabase():
 
 
 class FlatTable():
+    """
+    dealing with a table in the database
+    """
     __db: FlatDatabase = None
     __name: str = ''
     __fullpath: str = ''
@@ -180,7 +193,7 @@ class FlatTable():
     __fields: dict = {}
     __where_pending: list = []
 
-    def __init__(self, db: FlatDatabase, name: str, fields: str):
+    def __init__(self, database: FlatDatabase, name: str, fields: str):
         """
         init class
         -
@@ -188,9 +201,9 @@ class FlatTable():
         - name: the name of the database
         - fields: fields ddl
         """
-        self.__db = db
+        self.__db = database
         self.__name = name
-        self.__fullpath = db.fullPath()+os.sep+self.__name+os.sep
+        self.__fullpath = database.fullpath()+os.sep+self.__name+os.sep
 
         meta = fields.split(',')
 
@@ -209,28 +222,23 @@ class FlatTable():
                 if field_required.upper() == "PRIMARY_KEY":
                     self.__pk = field_name
                     field_required = True
-
-                    if len(field_desc) > 2 and field_desc[3].upper() == "AUTOINCREMENT":
-                        autoincrment = True
-                    else:
-                        autoincrment = False
+                    autoincrement = len(field_desc) > 2 and field_desc[3].upper() == "AUTOINCREMENT"
                 else:
-                    autoincrment = False
-
-                    if field_required.upper() == "REQUIRED":
-                        field_required = True
-                    else:
-                        field_required = False
+                    autoincrement = False
+                    field_required = field_required.upper() == "REQUIRED"
             except IndexError:
-                autoincrment = False
+                autoincrement = False
                 field_required = False
 
-            self.__fields[field_name] = {'type': field_type, 'required': field_required, 'autoincrement': autoincrment}
+            self.__fields[field_name] = {'type': field_type, 'required': field_required, 'autoincrement': autoincrement}
 
         if not self.__pk:
             raise FlatTableException(f"no primary key defined for table {name}")
 
     def _where_pending(self, data: dict) -> bool:
+        """
+        executes the actual where clause
+        """
         operators = {
                 '=': '==',
                 '!=': '!=',
@@ -251,32 +259,32 @@ class FlatTable():
 
         for condition in self.__where_pending:
             field = condition['field']
-            op = operators[condition['op']]
+            coperator = operators[condition['op']]
             value = condition['value']
-            type = condition['type']
+            condition_type = condition['type']
             data_value = data[field]
 
-            if op == 'like':
+            if coperator == 'like':
                 pattern = '^'+value.replace('%', '.*')+'$'
                 result = len(re.findall(pattern, data_value)) > 0
                 clause += f"{result} == True"
             else:
                 if isinstance(value, (int, float)) and isinstance(data_value, (int, float)):
-                    clause += f"{type} {data_value} {op} {value}"
+                    clause += f"{condition_type} {data_value} {coperator} {value}"
                 else:
-                    clause += f"{type} '{data_value}' {op} '{value}'"
+                    clause += f"{condition_type} '{data_value}' {coperator} '{value}'"
 
-        result = eval(clause)
+        result = eval(clause)  # pylint: disable=eval-used
         return result
 
-    def where(self, field: str, value: str, op: str = '=', conditional: str = 'and'):
+    def where(self, field: str, value: str, coperator: str = '=', conditional: str = 'and'):
         """
         adds a where condition to the select statement
         -
         - field: field name in the table
         - value: the value
-        - op: operator
-        - conditional: operator
+        - coperator: compare operator
+        - conditional: logical operator
         """
         if len(self.__where_pending) == 0:
             conditional = ''
@@ -284,16 +292,16 @@ class FlatTable():
         if field not in self.__fields:
             raise FlatTableException(f"field {field}  unknown")
 
-        self.__where_pending.append({'type': conditional, 'field': field, 'op': op, 'value': value})
+        self.__where_pending.append({'type': conditional, 'field': field, 'op': coperator, 'value': value})
         return self
 
-    def validateFields(self, data: dict):
+    def validate_fields(self, data: dict):
         """
         checks if all given fields in the dict are valid
         -
         - data: the field - value dict
         """
-        for key, value in data.items():
+        for key, value in data.items():  # pylint: disable=unused-variable
             if self.__fields.get(key) is None:
                 raise FlatValidationException(f"field {key} is unknown")
 
@@ -303,7 +311,7 @@ class FlatTable():
 
         return self
 
-    def primaryKey(self) -> str:
+    def primary_key(self) -> str:
         """
         returns the primary key of the table
         -
@@ -324,8 +332,8 @@ class FlatTable():
         """
         if not field:
             return self.__fields
-        else:
-            return self.__fields[field]
+
+        return self.__fields[field]
 
     def name(self) -> str:
         """
@@ -334,15 +342,15 @@ class FlatTable():
         """
         return self.__name
 
-    def idExists(self, id) -> bool:
+    def id_exists(self, primary_key) -> bool:
         """
         checks if the primary key existss
         -
         """
-        if type(id) is int:
-            return os.path.isfile(self.__fullpath+str(id))
-        else:
-            return os.path.isfile(self.__fullpath+id)
+        if isinstance(primary_key, int):
+            return os.path.isfile(self.__fullpath+str(primary_key))
+
+        return os.path.isfile(self.__fullpath+primary_key)
 
     def insert(self, data: dict) -> bool:
         """
@@ -350,100 +358,100 @@ class FlatTable():
         -
         - data: the field - value dict
         """
-        self.validateFields(data)
+        self.validate_fields(data)
         primary_key = data.get(self.__pk, '')
 
         if primary_key:
-            if self.idExists(primary_key):
+            if self.id_exists(primary_key):
                 raise FlatTableException(f"table {self.__name} duplicate primary key")
         else:
             if self.__fields[self.__pk]['autoincrement'] is True:
                 try:
                     primary_key = str(self.__db.sequence(self.__name))
                     data[self.__pk] = primary_key
-                except IndexError:
-                    raise FlatTableException(f"table {self.__name} primary key is missing")
+                except IndexError as flatex:
+                    raise FlatTableException(f"table {self.__name} primary key is missing") from flatex
             else:
                 raise FlatTableException(f"table {self.__name} primary key is missing")
 
-            if self.idExists(primary_key):
+            if self.id_exists(primary_key):
                 raise FlatTableException(f"table {self.__name} duplicate primary key")
 
         try:
-            with open(self.__fullpath+primary_key, "w") as file:
+            with open(self.__fullpath+primary_key, "w", encoding='utf-8') as file:
                 json.dump(data, file)
 
             return True
         except OSError:
             return False
 
-    def update(self, id, data: dict):
+    def update(self, primary_key, data: dict):
         """
         updates a row in the table
         -
         - id: the primary key
         - data: the field - value dict
         """
-        if type(id) is not str:
-            key = str(id)
+        if not isinstance(primary_key, str):
+            key = str(primary_key)
         else:
-            key = id
+            key = primary_key
 
         primary_key = data.get(self.__pk, '')
 
         if primary_key and primary_key != key:  # check if the given id and the primary_key match
             raise FlatTableException(f"table {self.__name} primary key cannot be modified")
 
-        if not self.idExists(key):
+        if not self.id_exists(key):
             return False
 
         try:
-            with open(self.__fullpath+key, "r+") as file:
+            with open(self.__fullpath+key, "r+", encoding='utf-8') as file:
                 fcntl.flock(file, fcntl.LOCK_EX)
                 current_data = json.load(file)
                 new_data = {**current_data, **data}
-                self.validateFields(new_data)
+                self.validate_fields(new_data)
                 file.seek(0)
                 json.dump(new_data, file)
                 file.truncate()
                 fcntl.flock(file, fcntl.LOCK_UN)
 
             return new_data
-        except FlatValidationException as e:
-            raise FlatValidationException(e.args)
-        except Exception:
+        except FlatValidationException as flatex:
+            raise FlatValidationException(flatex.args) from flatex
+        except OSError:
             return False
 
-    def find(self, id):
+    def find(self, key):
         """
         findes a row in the table
         -
         - id: the primary key
         """
-        if type(id) is not str:
-            key = str(id)
+        if not isinstance(key, str):
+            pkey = str(key)
         else:
-            key = id
+            pkey = key
 
         try:
-            with open(self.__fullpath+key, "r") as file:
+            with open(self.__fullpath+pkey, "r", encoding='utf-8') as file:
                 return json.load(file)
         except OSError:
             return None
 
-    def delete(self, id) -> bool:
+    def delete(self, key) -> bool:
         """
         deletes a row in the table
         -
         - id: the primary key
         """
-        if type(id) is not str:
-            key = str(id)
+        if not isinstance(key, str):
+            pkey = str(key)
         else:
-            key = id
+            pkey = key
 
         try:
-            os.remove(self.__fullpath+key)
+            os.remove(self.__fullpath+pkey)
             return True
         except OSError:
             return False
@@ -451,8 +459,6 @@ class FlatTable():
     def count(self) -> int:
         """
         counts the rows in the table
-        -
-        - id: the primary key
         """
         counter = 0
 
@@ -471,7 +477,7 @@ class FlatTable():
         self.__where_pending.clear()
         return counter
 
-    def findAll(self, *, limit: int = 0, offset: int = 0, return_ids: bool = False):
+    def findall(self, *, limit: int = 0, offset: int = 0, return_ids: bool = False):
         """
         finds rows in the table
         -
@@ -502,7 +508,7 @@ class FlatTable():
                 else:
                     result.append(data)
 
-                if limit > 0 and limit_cnt >= limit:
+                if 0 < limit <= limit_cnt:
                     break
 
             break
