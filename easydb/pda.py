@@ -1,5 +1,5 @@
 """
-module v1.3.0
+module v1.3.1
 Data-Access-Layer and query builder for MySQL and SQLite
 """
 
@@ -20,36 +20,47 @@ class PDAException(Exception):
     """
 
 
-class DDL():
-    """
-    class to build the data description language for the connected database
-    """
+"""
+class to build the data description language for the connected database
+"""
+class DDL:
     __table: str = ''
     __primary_key: str = ''
     __fields: dict = {}
     __foreign_keys: dict = {}
     __unique: list = []
     __unique_constraint: list = []
-    __indexes: list = []
+    __indexes: dict = {}
 
     def __init__(self, table: str):
+        """
+        Initializes the DDL class with the table name.
+        """
         self.__table = table
-        self.__primary_key: str = ''
-        self.__fields: dict = {}
-        self.__foreign_keys: dict = {}
-        self.__unique: list = []
-        self.__unique_constraint: list = []
+        self.__primary_key = ''
+        self.__fields = {}
+        self.__foreign_keys = {}
+        self.__unique = []
+        self.__unique_constraint = []
+        self.__indexes = {}
+
+    @staticmethod
+    def table(table: str):
+        """
+        Static method to create a DDL instance.
+        """
+        return DDL(table)
 
     def integer(self, name: str, not_null: bool = False, auto_increment: bool = False, unique: bool = False, default: int = None):
         """
-        create an integer columnt
+        Create an integer column.
         """
         self.__fields[name] = {'type': 'integer', 'not_null': not_null, 'auto_increment': auto_increment, 'unique': unique, 'default': default}
         return self
 
     def text(self, name: str, size: int = 255, not_null: bool = False, unique: bool = False, default: str = None):
         """
-        create a text columnt
+        Create a text column.
         """
         if default is not None:
             default = f'"{default}"'
@@ -59,76 +70,74 @@ class DDL():
 
     def real(self, name: str, not_null: bool = False, default: float = None):
         """
-        create a number columnt
+        Create a real column.
         """
         self.__fields[name] = {'type': 'real', 'not_null': not_null, 'auto_increment': False, 'unique': False, 'default': default}
         return self
 
     def blob(self, name: str, not_null: bool = False):
         """
-        create a blob columnt
+        Create a blob column.
         """
-        self.__fields[name] = {'type': 'blob', 'not_null': not_null, 'auto_increment': False, 'unique': False}
+        self.__fields[name] = {'type': 'blob', 'not_null': not_null, 'auto_increment': False, 'unique': False, 'default': None}
         return self
 
     def datetime(self, name: str, not_null: bool = False, unique: bool = False, default: str = None):
         """
-        create a datetime columnt
+        Create a datetime column.
         """
         self.__fields[name] = {'type': 'datetime', 'not_null': not_null, 'auto_increment': False, 'unique': unique, 'default': default}
         return self
 
-    def numeric(self, name: str, not_null: bool = False, default: float = None):
+    def numeric(self, name: str, not_null: bool = False, default: any = None):
         """
-        create a number columnt
+        Create a numeric column.
         """
         self.__fields[name] = {'type': 'numeric', 'not_null': not_null, 'auto_increment': False, 'unique': False, 'default': default}
         return self
 
     def unique(self, field: str):
         """
-        create a single unique column constraint
+        Create a single unique column constraint.
         """
         self.__unique.append(field)
         return self
 
     def unique_constraint(self, fields: str):
         """
-        create a multiple unique columns constraint
+        Create a multiple unique columns constraint.
         """
         self.__unique_constraint.append(fields)
         return self
 
     def primary_key(self, fields: str):
         """
-        create a primary key
+        Create a primary key.
         """
         self.__primary_key = fields
         return self
 
     def foreign_key(self, fields: str, parent_table: str, primary_key: any):
         """
-        create a foreign kez
+        Create a foreign key.
         """
         self.__foreign_keys[fields] = {'parent_table': parent_table, 'primary_key': primary_key}
         return self
 
     def index(self, fields: str, index_name: str = ''):
         """
-        create an index
+        Create an index.
         """
-        if index_name:
-            i = self.__indexes.count() + 1
+        if not index_name:
+            i = len(self.__indexes) + 1
             index_name = f"idx_{self.__table}_{i}"
-        else:
-            index_name = f"idx_{self.__table}_1"
-
+        
         self.__indexes[index_name] = fields
         return self
 
     def create_sq3(self) -> str:
         """
-        build the ddl for sqlite database
+        Build the ddl for sqlite database.
         """
         sql = f"create table {self.__table} ("
 
@@ -154,7 +163,7 @@ class DDL():
         if self.__unique_constraint:
             for key, value in enumerate(self.__unique_constraint):
                 constraint_name = f"{self.__table}_constraint{key}"
-                sql = f"CONSTRAINT {constraint_name} UNIQUE ({value}), "
+                sql += f"CONSTRAINT {constraint_name} UNIQUE ({value}), "
 
         if self.__foreign_keys:
             for key, value in self.__foreign_keys.items():
@@ -165,16 +174,16 @@ class DDL():
         sql = sql[:-2] + ')'
 
         if self.__indexes:
-            sql += ';'
-
-            for index, fields in self.__indexes:
-                sql += f"CREATE INDEX {index} ON {self.__table} {fields}"
+            sql += ';\n'
+            for index, fields in self.__indexes.items():
+                sql += f"CREATE INDEX {index} ON {self.__table} ({fields});\n"
+            sql = sql[:-1] # Remove the last newline
 
         return sql
 
     def create_msq(self) -> str:
         """
-        build the ddl for mysql database
+        Build the ddl for mysql database.
         """
         sql = f"create table {self.__table} ("
 
@@ -194,17 +203,18 @@ class DDL():
                 column_type = 'INT'
 
             not_null = ' NOT NULL' if values['not_null'] is True else ''
+            default = '' if values['default'] is None else f" DEFAULT {values['default']}"
 
             if values['auto_increment'] is True:
                 auto_increment = ' AUTO_INCREMENT'
-                self.primary_key(field)
+                if not self.__primary_key:
+                    self.primary_key(field)
             else:
                 auto_increment = ''
 
             if values['unique'] is True:
                 self.unique(field)
 
-            default = '' if values['default'] is None else f" DEFAULT {values['default']}"
             sql += f"{field} {column_type}{not_null}{default}{auto_increment}, "
 
         if self.__primary_key:
@@ -217,10 +227,10 @@ class DDL():
         if self.__unique_constraint:
             for key, value in enumerate(self.__unique_constraint):
                 constraint_name = f"{self.__table}_constraint{key}"
-                sql = f"CONSTRAINT {constraint_name} UNIQUE ({value}), "
+                sql += f"CONSTRAINT {constraint_name} UNIQUE ({value}), "
 
         if self.__foreign_keys:
-            for key, value in self.__foreign_keys:
+            for key, value in self.__foreign_keys.items():
                 parent_table = value['parent_table']
                 parent_pk = value['primary_key']
                 sql += f"FOREIGN KEY({key}) REFERENCES {parent_table} ({parent_pk}), "
@@ -228,39 +238,41 @@ class DDL():
         sql = sql[:-2] + ')'
 
         if self.__indexes:
-            sql += ';'
-
-            for index, fields in self.__indexes:
-                sql += f"CREATE INDEX {index} ON {self.__table} {fields}"
+            sql += ';\n'
+            for index, fields in self.__indexes.items():
+                sql += f"CREATE INDEX {index} ON {self.__table} ({fields});\n"
+            sql = sql[:-1] # Remove the last newline
 
         return sql
 
     def create_flat(self) -> str:
         """
-        build the ddl for flatfile database
+        Build the ddl for flatfile database.
         """
         sql = ''
 
         for field, values in self.__fields.items():
-            autoincrment = ''
             required = 'REQUIRED' if values['not_null'] is True else ''
-
             column_type = str(values['type']).upper()
+            auto_increment = ''
 
             if values['auto_increment'] is True:
-                autoincrment = 'AUTOINCREMENT'
-
-                if self.__primary_key:
-                    raise PDAException(f"primary key already declared for {self.__primary_key}")
+                auto_increment = 'AUTOINCREMENT'
+                if self.__primary_key and self.__primary_key != field:
+                    raise Exception(f"primary key already declared for {self.__primary_key}")
 
                 self.__primary_key = field
 
             if self.__primary_key and self.__primary_key == field:
-                sql += f"{field} {column_type} PRIMARY_KEY {autoincrment}, "
+                sql += f"{field} {column_type} PRIMARY_KEY {auto_increment}, "
             else:
                 sql += f"{field} {column_type} {required}, "
 
-        return sql[:-2]
+        # Clean up the trailing comma and space and add a closing parenthesis if there are any fields.
+        if sql:
+            sql = sql[:-2] + ')'
+
+        return sql
 
 
 class Singleton(type):
@@ -1348,13 +1360,18 @@ class TableMSQ(TableBaseClass):
             raise PDAException(f"cannot retrieve metadata from table {name}")
 
         for key, value in enumerate(self._meta_data):  # building field dictionary from meta data
-            if value['Key'] == 'PRI':
+            if isinstance(value['Key'], bytearray) and value['Key'].upper() == b'PRI':
                 keynum = key
                 name = value['Field']
                 self._pk[keynum] = name
                 self._pk_query += f"{name}={self._parameter_marker} and "
 
-            self._fields[value['Field']] = {'type': value['Type'], 'default': value['Default'], 'required': value['Null'] == 'NO'}
+            null_status = value['Null']
+
+            if isinstance(null_status, bytearray):
+                null_status = null_status.decode('utf-8')
+            
+            self._fields[value['Field']] = {'type': value['Type'], 'default': value['Default'], 'required': null_status.upper() == 'NO'}
 
         if not self._pk and typedef == 'table':  # a primary key for a table is mandatory
             raise PDAException(f"table {name} no primary key defined")

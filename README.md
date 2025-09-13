@@ -25,11 +25,15 @@ Connecting to a database need to be done only once in your application. After th
 ### SQLite
 
 ```python
+from easydb import pda
+
     db = pda.Database().db_sq3('/somewhere/dbtest.sqlite')
 ```
 
 ### MySql
 ```python
+from easydb import pda
+
     host='localhost'
     database='dbtest'
     user='dbuser'
@@ -40,6 +44,8 @@ Connecting to a database need to be done only once in your application. After th
 ### Flatfile
 
 ```python
+from easydb import pda
+
     datapath='/somewhere'
     db = pda.Database().db_flat(datapath, 'dbtest.flat')
 
